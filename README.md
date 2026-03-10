@@ -3,6 +3,20 @@ Este repositório contém o trabalho desenvolvido no âmbito da Unidade Curricul
 
 O projeto foca-se no desenvolvimento de um fluxo de trabalho (workflow) em R/Bioconductor para a análise de dados biológicos, abrangendo desde o processamento inicial até à modelação preditiva.
 
+## Resumo do Conjunto de Dados Escolhido
+
+**Título:** Ovarian Cancer (Gray Foundation, Cancer Discov 2024)
+
+**Fonte:** [cBioPortal](https://www.cbioportal.org/study/summary?id=ovary_geomx_gray_foundation_2024)
+
+**Tipo de Dados:** 
+* Transcriptómica de microrregiões (GeoMx mRNA-Seq)
+* Imagens Multiplex (CyCIF - frações de tipos celulares)
+* Intensidade de marcadores p53
+* Metadados Clínicos (Estado de Mutação BRCA, estadiamento HGSOC, etc.)
+
+**Dimensão:** 567 amostras com dados de expressão genética (mRNA-Seq)
+  
 ## Metodologia e Fases do Trabalho
 
 O trabalho está estruturado em três fases de desenvolvimento:
