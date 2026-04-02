@@ -37,7 +37,22 @@ O trabalho está estruturado em três fases principais de desenvolvimento:
 * **Análise Preditiva:** Implementação de algoritmos de Machine Learning (Classificação/Regressão).
 * **Comparação de Modelos:** Avaliação de desempenho entre pelo menos dois modelos distintos.
 * **Seleção de Atributos:** Identificação da importância de genes ou proteínas específicas para o diagnóstico/prognóstico.
+---
+## Estrutura do Repositório
 
+### Código e Relatórios
+* **fase1_trabalho_G8.Rmd**: Script em RMarkdown contendo todo o pipeline de análise.
+* **fase1_trabalho_G8.html**: Versão compilada do trabalho para leitura em browser.
+
+### Dados Processados (`/data_processed`)
+* **Metadata_Processado.csv**: Metadados clínicos após limpeza e filtragem.
+* **Expressao_mRNA_Alinhada.csv**: Matriz de expressão génica normalizada e alinhada com as amostras clínicas.
+
+### Resultados da Análise (`/results`)
+* **Expressao_Diferencial_...csv**: Resultados completos do teste de expressão diferencial.
+* **Genes_Significativos_DE.csv**: Lista filtrada de genes com significância estatística.
+* **fGSEA_Hallmark_...csv**: Resultados da análise de enriquecimento de conjuntos de genes (Gene Set Enrichment Analysis).
+* **comparacoes_significativas_dunn.csv**: Resultados do teste post-hoc de Dunn para comparações múltiplas.
 ---
 
 ## Autores (Grupo 8)
