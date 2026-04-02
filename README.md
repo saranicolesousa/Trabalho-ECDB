@@ -14,7 +14,7 @@ O projeto foca-se no desenvolvimento de um fluxo de trabalho (*workflow*) em **R
 * **Referência:** Gray et al., 2024.
 * **Descrição dos dados:**
     * **Transcriptómica & Proteómica Espacial:** Dados obtidos através da tecnologia GeoMx Digital Spatial Profiler (DSP).
-    * **Metadados Clínicos:** Inclui informações detalhadas sobre as amostras e a localização espacial (ROI - Regions of Interest).
+    * **Metadados Clínicos:** Inclui informações detalhadas sobre as amostras e a localização espacial.
 * **Dimensão:** 567 amostras
 
 ---
