@@ -38,7 +38,7 @@ O trabalho está estruturado em três fases principais de desenvolvimento:
 
 ---
 
-## 👥 Autores (Grupo X)
+## Autores (Grupo 8)
 
 * **Bruno Ferreira** - PG58814
 * **Joana Maia** - PG58816
