@@ -10,7 +10,7 @@ O projeto foca-se no desenvolvimento de um fluxo de trabalho (*workflow*) em **R
 ## Conjunto de Dados Selecionado
 
 * **Título:** Ovarian Cancer (Foundation Medicine / Gray, 2024) 
-* **Fonte:** [cBioPortal - Ovary GeoMx (2024)](https://www.cbioportal.org/study/summary?id=ovary_geomx_gray_foundation_2024) cBioPortal
+* **Fonte:** [cBioPortal](https://www.cbioportal.org/study/summary?id=ovary_geomx_gray_foundation_2024)
 * **Referência:** Gray et al., 2024.
 * **Descrição dos dados:** * **Transcriptómica & Proteómica Espacial:** Dados obtidos através da tecnologia GeoMx Digital Spatial Profiler (DSP).
     * **Metadados Clínicos:** Inclui informações detalhadas sobre as amostras e a localização espacial (ROI - Regions of Interest).
