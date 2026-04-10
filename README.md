@@ -38,7 +38,8 @@ O trabalho está estruturado em três fases principais de desenvolvimento:
 * **Comparação de Modelos:** Avaliação de desempenho entre pelo menos dois modelos distintos.
 * **Seleção de Atributos:** Identificação da importância de genes ou proteínas específicas para o diagnóstico/prognóstico.
 ---
-## Estrutura do Repositório
+## Estrutura do Repositório (Fase 1)
+Todos os ficheiros relativos à primeira etapa do projeto encontram-se no diretório `fase1/`.
 
 ### Código e Relatórios
 * **fase1_trabalho_G8.Rmd**: Script em RMarkdown contendo todo o pipeline de análise.
