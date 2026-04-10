@@ -51,11 +51,11 @@ A caracterização desta trajetória — desde o tecido fisiológico normal, pas
 
 ```{r import-datasets}
 
-file_mrna = "/Users/Sara_1/Desktop/local_bioinformatic/2S/ECDB/database_ovario/data_mrna_seq_read_counts_zscores_ref_all_samples.txt"
-file_clinical = "/Users/Sara_1/Desktop/local_bioinformatic/2S/ECDB/database_ovario/data_clinical_sample.txt"
-file_intensity = "/Users/Sara_1/Desktop/local_bioinformatic/2S/ECDB/database_ovario/data_cell_intensity.txt"
-file_fractions = "/Users/Sara_1/Desktop/local_bioinformatic/2S/ECDB/database_ovario/data_cell_type_fractions.txt"
-file_patient ="/Users/Sara_1/Desktop/local_bioinformatic/2S/ECDB/database_ovario/data_clinical_patient.txt"
+file_mrna = "database_ovario/data_mrna_seq_read_counts_zscores_ref_all_samples.txt"
+file_clinical = "database_ovario/data_clinical_sample.txt"
+file_intensity = "database_ovario/data_cell_intensity.txt"
+file_fractions = "database_ovario/data_cell_type_fractions.txt"
+file_patient ="database_ovario/data_clinical_patient.txt"
 
 mrna_data = read.table(file_mrna, header = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
 
