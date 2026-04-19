@@ -1,0 +1,1165 @@
+---
+title: "Extração de Conhecimento de Dados Biológicos Trabalho prático nº 1"
+author: "Bruno Ferreira, Joana Maia, Sara Sousa"
+date: "`r Sys.Date()`"
+output: html_document
+bibliography: references/referencias_fase2.bib
+csl: references/apa.csl
+link-citations: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Análise Bioinformática 
+### Expressão Génica Espacial no Carcinoma do Ovário
+
+# Preparação e Integração de Dados
+
+Para que esta segunda fase da análise seja computacionalmente autónoma e reprodutível, foi incluído o bloco inicial de preparação de dados. Este segmento de código recupera as transformações essenciais realizadas na etapa exploratória, garantindo que os objetos `metadata_final` e `mrna_final` podem ser utilizados.
+
+## Carregamento de dados e packages
+
+```{r install_packs}
+
+# install.packages(c("ggplot2", "ggrepel", "Rtsne", "uwot", "MASS", "RColorBrewer"))
+library(ggplot2)
+library(ggrepel)
+library(Rtsne)
+library(uwot)
+library(MASS)
+library(RColorBrewer)
+```
+
+```{r import-datasets}
+
+file_mrna = "../database_ovario/data_mrna_seq_read_counts_zscores_ref_all_samples.txt"
+file_clinical = "../database_ovario/data_clinical_sample.txt"
+file_intensity = "../database_ovario/data_cell_intensity.txt"
+file_fractions = "../database_ovario/data_cell_type_fractions.txt"
+file_patient ="../database_ovario/data_clinical_patient.txt"
+
+mrna_data       = read.table(file_mrna, header      = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+clinical_data   = read.table(file_clinical, header  = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+intensity_data  = read.table(file_intensity, header = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+fractions_data  = read.table(file_fractions, header = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+patient_data    = read.table(file_patient, header   = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+```
+
+## Inspeção inicial dos datasets
+
+```{r check-data-types}
+
+#unlist(lapply(mrna_data, class))
+#unlist(lapply(clinical_data, class))
+#unlist(lapply(intensity_data, class))
+#unlist(lapply(fractions_data, class))
+#unlist(lapply(patient_data, class))
+```
+
+## Tratamento de valores omissos (Clinical e Patient Data)
+
+```{r imputation-clinical}
+
+m = mean(clinical_data$CELL_GROUP_COUNTS, na.rm = TRUE)
+clinical_data$CELL_GROUP_COUNTS[is.na(clinical_data$CELL_GROUP_COUNTS)] = m
+clinical_data$CELL_GROUP_COUNTS = round(clinical_data$CELL_GROUP_COUNTS)
+```
+
+```{r imputation-patient}
+
+patient_data$METASTATIC_SITES_PATIENT[is.na(patient_data$METASTATIC_SITES_PATIENT)] = "None"
+patient_data$TREATMENT_COMMENTS[is.na(patient_data$TREATMENT_COMMENTS)]             = "No comments"
+patient_data$TREATMENT_TYPE[is.na(patient_data$TREATMENT_TYPE)]                     = "Unknown/Not Specified"
+```
+
+## Integração de metadados
+
+```{r merge-clinical-patient}
+
+metadata_final = merge(clinical_data, patient_data, by = "PATIENT_ID")
+```
+
+## Standardização e Normalização
+
+```{r scaling-and-factors}
+
+metadata_final$ROI_TYPES             = as.factor(metadata_final$ROI_TYPES)
+metadata_final$LESIONS_TYPES         = as.factor(metadata_final$LESIONS_TYPES)
+metadata_final$BRCA_STATUS_PATIENT   = as.factor(metadata_final$BRCA_STATUS_PATIENT)
+metadata_final$INCIDENTAL_LESIONS    = as.factor(metadata_final$INCIDENTAL_LESIONS)
+metadata_final$TREATMENT_TYPE.       = as.factor(metadata_final$TREATMENT_TYPE)
+metadata_final$BRCA_STATUS           = as.factor(metadata_final$BRCA_STATUS)
+metadata_final$LESIONS_HLA_E_STATUS  = as.factor(metadata_final$LESIONS_HLA_E_STATUS)
+metadata_final$STAGE_HGSOC           = as.factor(metadata_final$STAGE_HGSOC)
+metadata_final$CELL_COUNT_ST         = scale(metadata_final$CELL_GROUP_COUNTS)
+#unlist(lapply(metadata_final, class))
+```
+
+## Integração de intensidades (CyCIF)
+
+```{r merge-cycif-intensities}
+
+intensity_raw         = intensity_data[, -c(1, 2)] 
+intensity_t           = as.data.frame(t(intensity_raw))
+colnames(intensity_t) = intensity_data$NAME
+intensity_t$SAMPLE_ID = rownames(intensity_t)
+metadata_final        = merge(metadata_final, intensity_t, by = "SAMPLE_ID")
+```
+
+## Integração de frações e filtragem de mRNA
+
+```{r transcriptomics-alignment-and-filtering}
+
+fractions_raw         = fractions_data[,-c(1,2)]
+fractions_t           = as.data.frame(t(fractions_raw))
+colnames(fractions_t) = fractions_data$NAME
+fractions_t$SAMPLE_ID = rownames(fractions_t)
+
+metadata_final = merge(metadata_final, fractions_t, by="SAMPLE_ID")
+
+gene_names    = mrna_data[,1]
+mrna_filtrado = mrna_data[, colnames(mrna_data) %in% metadata_final$SAMPLE_ID]
+
+variancia            = apply(mrna_filtrado, 1, var)
+mrna_final           = mrna_filtrado[variancia > 0, ]
+rownames(mrna_final) = gene_names[variancia > 0]
+
+gene_names.   = mrna_data[,1]
+mrna_filtrado = mrna_data[, colnames(mrna_data) %in% metadata_final$SAMPLE_ID]
+
+mrna_final               = mrna_final[, metadata_final$SAMPLE_ID]
+all(colnames(mrna_final) == metadata_final$SAMPLE_ID)
+```
+
+## Tratamento final de colunas
+
+```{r metadata-curation}
+metadata_final = subset(metadata_final, select = -c(CASE_ID,CYCIF_ID,GEOMX_ID,SPECIMEN,BRCA_STATUS,LOT_HUMAN_NGS_WHOLE_TRANSCRIPTOME_ATLAS_RNA_1_0,SURGERIES_PERFORMED ,LESIONS, METASTATIC_SITES_PATIENT, VITAL_STATUS_AT_LAST_FOLLOW_UP, ETHNICITY, TREATMENT_COMMENTS, FT_FIMBRIAE_INVOLVEMENT,AGE_AT_LAST_FOLLOW_UP_YRS))
+
+metadata_final$CELL_COUNT_ST = as.numeric(scale(metadata_final$CELL_GROUP_COUNTS))
+cols_to_remove              = c("CELL_COUNT_ST1", "CELL_COUNT_ST2")
+metadata_final               = metadata_final[, !(names(metadata_final) %in% cols_to_remove)]
+#unlist(lapply(metadata_final, class))
+```
+
+# Análise de Dados Não Supervisionada
+
+Dando continuidade ao estudo dos dados, iniciou-se a fase de **Análise de Dados Não Supervisionada**, recorrendo a algoritmos de **Clustering Hierárquico**. Ao contrário das análises anteriores, onde os grupos eram pré-definidos, esta abordagem permite identificar padrões intrínsecos de similaridade entre as amostras, sem depender de rótulos prévios.
+
+Para facilitar a interpretação biológica dos resultados, foi desenvolvida a função auxiliar `my.plot.hc`. Esta função personaliza a visualização de dendrogramas, permitindo colorir as amostras de acordo com variáveis de metadados específicas (como tipo de lesão ou estado mutacional). Esta sobreposição de informação é crucial para verificar se o agrupamento matemático das amostras reflete a sua identidade histológica ou genética, auxiliando na descoberta de novos subgrupos moleculares.
+
+```{r custom-hclust-plot-function}
+my.plot.hc = function(hclust, metadata_var, 
+                      lab     = 1:length(hclust$order), 
+                      lab.col = as.integer(metadata_var) + 1, 
+                      hang    = 0.1, ...) {
+  lev = levels(metadata_var)
+  y   = rep(hclust$height, 2)
+  x   = as.numeric(hclust$merge)
+  y   = y[which(x < 0)]
+  x   = x[which(x < 0)]
+  x   = abs(x)
+  y   = y[order(x)]
+  x   = x[order(x)]
+
+  plot(hclust, labels = FALSE, hang = hang, ...)
+
+  text(x      = x, 
+       y      = y[hclust$order] - (max(hclust$height) * hang), 
+       labels = lab[hclust$order], 
+       col    = lab.col[hclust$order], 
+       srt    = 90, 
+       adj    = c(1, 0.5), 
+       xpd    = NA, ...)
+
+  legend("topright", legend = lev, fill = 2:(length(lev) + 1), border = NA, bty = "n")}
+```
+
+## Pré-processamento e Seleção de Atributos
+
+Antes da aplicação de algoritmos de clustering hierárquico, é necessário proceder ao pré-processamento da matriz de expressão génica (mRNA). Esta etapa assegura que a análise se foca nos sinais biológicos mais relevantes, minimizando o ruído e a influência de genes com baixa variabilidade. O fluxo de trabalho adotado compreende as seguintes etapas críticas:
+
+- **Normalização e Escalonamento (z-score)**: transformação de escala aos dados de expressão para que cada gene apresente uma média de zero e um desvio padrão de um;
+
+- **Seleção de Genes Altamente Variáveis (HVG)**: selecionados os 500 genes com maior variância na coorte para otimização da computação e focar a análise nos principais vetores de diferenciação biológica. Estes genes são os que mais contribuem para a distinção entre os diferentes estados histológicos e o microambiente tumoral [@Ma2011];
+
+- **Filtragem e Limpeza**: remoção de registos com valores omissos e garantia da correspondência exata entre os identificadores de amostra na matriz de expressão e nos metadados clínicos, assegurando a integridade dos dados.
+
+Esta matriz otimizada servirá de base para a exploração de padrões de agrupamento não supervisionado, permitindo verificar se a expressão génica reflete a organização histopatológica observada anteriormente.
+
+```{r clustering-data-prep}
+
+expr_mat       = as.matrix(mrna_final)
+mode(expr_mat) = "numeric"
+
+dim(expr_mat)
+
+all(colnames(expr_mat) == metadata_final$SAMPLE_ID)
+
+expr_mat                        = expr_mat[complete.cases(expr_mat), ]
+expr_mat_sc                     = t(scale(t(expr_mat)))  
+expr_mat_sc[is.na(expr_mat_sc)] = 0
+
+gene_var  = apply(expr_mat, 1, var, na.rm = TRUE)
+top_genes = names(sort(gene_var, decreasing = TRUE))[1:500]
+expr_top  = expr_mat_sc[top_genes, ]
+
+dim(expr_top)
+
+metadata_final$LESIONS_TYPES       = as.factor(metadata_final$LESIONS_TYPES)
+metadata_final$ROI_TYPES           = as.factor(metadata_final$ROI_TYPES)
+metadata_final$BRCA_STATUS_PATIENT = as.factor(metadata_final$BRCA_STATUS_PATIENT)
+```
+
+## Clustering Hierárquico
+
+Nesta etapa, procedeu-se à aplicação do **Clustering Hierárquico** (método *Complete Linkage* com distância Euclidiana) sobre a matriz de expressão dos **500 genes** mais variáveis. O objetivo principal é avaliar se a similaridade transcriptómica entre as amostras permite o seu agrupamento natural de acordo com as variáveis clínicas e histológicas.
+
+Para uma interpretação comparativa, geraram-se três visualizações do mesmo dendrograma, colorindo as amostras consoante:
+
+- `LESIONS_TYPES`: verificar se amostras com a mesma patologia partilham perfis de expressão génica semelhantes e se as lesões precursoras se agrupam com os carcinomas invasivos;
+
+- `ROI_TYPES`: verificar se o principal motor de diferenciação molecular é o compartimento tecidular (Epitélio vs. Estroma);
+
+- `BRCA_STATUS`: verificar se o perfil de expressão global é influenciado pelo estatuto mutacional da paciente, o que poderia indicar fenótipos moleculares distintos entre casos hereditários e esporádicos.
+
+Esta abordagem permite identificar qual destes fatores exerce maior influência na estrutura dos dados.
+
+```{r hierarchical-clustering-samples}
+
+dist_samples = dist(t(expr_top),    method = "euclidean")
+hc_samples   = hclust(dist_samples, method = "complete")
+
+my.plot.hc(hc_samples, metadata_final$LESIONS_TYPES,       main = "Clustering hierárquico LESIONS_TYPES", cex = 0.6)
+my.plot.hc(hc_samples, metadata_final$ROI_TYPES,           main = "Clustering hierárquico ROI_TYPES", cex = 0.6)
+my.plot.hc(hc_samples, metadata_final$BRCA_STATUS_PATIENT, main = "Clustering hierárquico BRCA_STATUS", cex = 0.6)
+```
+
+**Interpretação**
+
+1. *Tipo de Lesão (`LESIONS_TYPES`)*: organização mista, sugerindo que, embora existam agrupamentos de perfis transcriptómicos semelhantes, a patologia isolada não é o único motor da variabilidade genética global. Observa-se que algumas amostras de `Inv Cancer` e `STIC` tendem a agrupar-se, partilhando assinaturas moleculares de progressão, enquanto as lesões incidentais aparecem dispersas [@Kader2025; @Labidi-Galy2017]. Esta observação indica que o perfil de mRNA captura estados de transição biológica que podem preceder as alterações histológicas visíveis.
+
+2. *Compartimento Tecidular (`ROI_TYPES`)*: apresenta o sinal biológico mais estruturado e nítido da análise não supervisionada. É possível observar a formação de dois clusters que separam as amostras de `Epitélio` das amostras de `Estroma`. Este resultado confirma que o compartimento tecidular é o fator determinante na expressão génica da coorte. Esta segregação é esperada em estudos de transcriptómica espacial, uma vez que as funções biológicas e as identidades celulares destes dois microambientes são profundamente distintas [@Denisenko2024; @Wu2022].
+
+3. *Estatuto BRCA (`BRCA_STATUS`)*: elevada dispersão das amostras portadoras de mutação ao longo de todos os agrupamentos. A ausência de um cluster exclusivo para pacientes BRCA sugere que o perfil de expressão global dos 500 genes mais variáveis é mais influenciado pelo tipo de tecido e patologia do que pela genética da paciente. Conclui-se que, nesta escala de análise transcriptómica, o fenótipo molecular de pacientes com risco hereditário e esporádico é comparável, partilhando vias de progressão comuns [@Jazaeri2002; @Przybytkowski2020].
+
+## Heatmap
+
+Complementando a análise de clustering hierárquico, geraram-se *heatmaps* para os 500 e 100 genes com maior variância na coorte. Esta técnica de visualização bidimensional permite correlacionar, simultaneamente, o agrupamento das amostras (colunas) com o agrupamento dos perfis de expressão génica (linhas).
+
+*Heatmap dos 500 Genes*: visão panorâmica da arquitetura molecular dos dados, permitindo identificar blocos de co-expressão que definem a identidade biológica das amostras.
+
+*Heatmap dos 100 Genes*: ao reduzir a complexidade para os 100 genes mais variáveis, a visualização torna-se mais nítida, facilitando a identificação de padrões de expressão contrastantes (assinaturas moleculares).
+
+A escala de cores representa os valores de *z-score*, onde a transição entre cores evidencia os genes sobre-expressos e sub-expressos em cada cluster. A observação de blocos de cor bem definidos é um forte indicador de que a expressão génica na trompa de Falópio é altamente organizada e específica, dependendo do estado patológico ou do compartimento tecidular analisado.
+
+```{r heatmaps-top-genes}
+
+heatmap(expr_top, labCol = FALSE, labRow = FALSE, scale = "none", main = "Heatmap dos 500 genes mais variáveis")
+
+top100_genes = names(sort(gene_var, decreasing = TRUE))[1:100]
+expr_top100  = expr_mat_sc[top100_genes, ]
+
+heatmap(expr_top100, labCol = FALSE, labRow = FALSE, scale = "none", main = "Heatmap dos 100 genes mais variáveis")
+```
+
+**Interpretação**
+
+1. **Heatmap dos 500 Genes Mais Variáveis**: revela uma organização estruturada da expressão génica, onde é possível identificar grandes blocos de co-expressão (módulos génicos). A presença de colunas com perfis de cores contrastantes indica que as amostras se agrupam em fenótipos moleculares distintos. Este padrão sugere que a seleção dos 500 genes mais variáveis foi eficaz a capturar a heterogeneidade biológica da coorte, permitindo distinguir, de forma não supervisionada, as principais assinaturas que definem o microambiente tumoral e a progressão da doença [@Denisenko2024; @Kader2025].
+
+2. **Heatmap dos 100 Genes Mais Variáveis**: ao reduzir a análise para os 100 genes com maior variância, os padrões de expressão tornam-se ainda mais nítidos e polarizados. Observam-se clusters de genes que estão fortemente 'ligados' (amarelo/quente) num grupo de amostras e 'desligados' (vermelho/frio) noutro. Esta dicotomia visual clara é um forte indício da existência de biomarcadores específicos que diferenciam os compartimentos tecidulares ou os estádios de malignidade [@Denisenko2024; @Kader2025]. A elevada consistência interna destes blocos de cor reforça a robustez dos dados de mRNA obtidos e a sua capacidade de discriminação biológica.
+
+## Clustering Hierárquico Detalhado
+
+Para além de agrupar as amostras, é fundamental compreender a organização funcional dos genes. Procedeu-se ao clustering hierárquico dos 50 genes com maior variância, utilizando a distância Euclidiana e o método *complete linkage*. Ao contrário do clustering de amostras, esta análise foca-se em identificar módulos de co-expressão. Genes que aparecem agrupados em ramos próximos tendem a apresentar perfis de expressão semelhantes ao longo da coorte, o que frequentemente indica que estão envolvidos nas mesmas vias biológicas ou que são regulados pelos mesmos mecanismos moleculares. A redução para o "Top 50" permite uma visualização nítida das etiquetas de cada gene, facilitando a identificação individual de potenciais biomarcadores que coordenam a transição entre o tecido normal, as lesões precursoras e o carcinoma invasivo.
+
+```{r gene-clustering-top50}
+
+top50_genes = names(sort(gene_var, decreasing = TRUE))[1:50]
+expr_top50  = expr_mat_sc[top50_genes, ]
+dist_genes  = dist(expr_top50,   method = "euclidean")
+hc_genes    = hclust(dist_genes, method = "complete")
+
+plot(hc_genes, main = "Clustering hierárquico de genes (50 mais variáveis)", xlab = "", sub = "", ylab = "Height", cex = 0.6)
+```
+
+**Interpretação**
+
+O clustering hierárquico aplicado aos 50 genes mais variáveis permitiu a identificação de módulos de co-expressão distintos. A estrutura revela ramos bem definidos onde genes com funções biológicas correlacionadas se agrupam, sugerindo uma regulação coordenada. Por exemplo, a proximidade de genes como o *EPCAM* e o *KRT18* (marcadores epiteliais clássicos) num dos clusters principais, contrasta com a presença de genes associados à remodelação da matriz extracelular noutro ramo [@Drapkin2004; @Denisenko2024; @Wu2022]. Este agrupamento não só valida a qualidade biológica da amostra, como também destaca os principais vetores moleculares que distinguem o microambiente tumoral da trompa de Falópio.
+
+## Robustez da Estrutura de Clustering
+
+Para avaliar a robustez do agrupamento hierárquico dos genes, procedeu-se à comparação de três métodos distintos de linkage: `Complete`, `Single` e `Average`. Cada um destes algoritmos utiliza critérios diferentes para calcular a distância entre clusters, o que pode influenciar o dendrograma. A visualização comparativa permite confirmar se os principais módulos de co-expressão identificados anteriormente se mantêm estáveis independentemente do método utilizado, reforçando a confiança na interpretação biológica dos resultados.
+
+```{r comparison-clustering-linkage}
+
+hc_complete = hclust(dist_genes, method = "complete")
+hc_single   = hclust(dist_genes, method = "single")
+hc_average  = hclust(dist_genes, method = "average")
+par(mfrow   = c(1, 3), mar = c(3, 4, 4, 1))
+
+plot(hc_complete, main = "Complete linkage", labels = FALSE, hang = -1, xlab = "", sub = "", ylab = "Height")
+plot(hc_single,   main = "Single linkage",   labels = FALSE, hang = -1, xlab = "", sub = "", ylab = "Height")
+plot(hc_average,  main = "Average linkage",  labels = FALSE, hang = -1, xlab = "", sub = "", ylab = "Height")
+
+par(mfrow = c(1, 1))
+```
+
+**Interpretação**
+
+A comparação entre os métodos de linkage permitiu validar a estabilidade dos módulos de co-expressão identificados. Enquanto o método *Single linkage* apresenta o efeito de *chaining*, dificultando a partição de grupos claros, os métodos *Complete* e *Average* revelam uma topologia muito semelhante, com ramos bem definidos e alturas de fusão consistentes [@Everitt2011]. A persistência dos principais agrupamentos de genes em ambos os métodos reforça a existência de uma estrutura biológica robusta nos dados, confirmando que as associações moleculares observadas não são artefactos do algoritmo escolhido, mas sim reflexo de relações funcionais entre os genes mais variáveis da coorte.
+
+## Elbow Method
+
+Para complementar a análise hierárquica, aplicou-se o algoritmo de partição *K-means*. A escolha do número ideal de clusters ($k$) foi orientada pelo `Elbow Method`, que analisa a soma dos quadrados dentro dos clusters (*Within-cluster Sum of Squares - WSS*) em função de $k$. 
+
+```{r kmeans-elbow-method}
+
+set.seed(123)
+
+wss = c()
+for (k in 2:10) {wss = c(wss, sum(kmeans(t(expr_top), centers = k, nstart = 50)$withinss))}
+
+plot(2:10, wss, type = "b", pch  = 19, xlab = "Número de clusters (k)", ylab = "WSS", main = "Elbow Plot")
+```
+
+**Interpretação**
+
+Observa-se que a variabilidade interna (WSS) diminui drasticamente até $k=3$, ponto a partir do qual a taxa de redução se torna marginal. Esta inflexão sugere que dividir a coorte em três subgrupos é a estratégia mais equilibrada para capturar as principais assinaturas moleculares presentes na amostra, sem incorrer em *overfitting*. A escolha de $k=3$ reflete, possivelmente, a distinção biológica entre o estroma, o epitélio saudável/incidental e as lesões de alto grau [@Kader2025; @Denisenko2024].
+
+## Algoritmo Kmears
+
+Após a determinação de $k=3$ como o número ideal de grupos, aplicou-se o algoritmo *K-means* para segmentar a coorte com base no seu perfil de expressão mRNA. Para validar o significado biológico destes clusters, geraram-se tabelas de contingência cruzando a atribuição de cada amostra a um cluster com as variáveis clínicas e histológicas conhecidas. Esta análise permite avaliar a concordância entre o agrupamento matemático e a realidade biológica.
+
+```{r kmeans-contingency-tables}
+
+k_opt = 3
+
+set.seed(123)
+km_samples = kmeans(t(expr_top), centers = k_opt, nstart = 100)
+
+cat("--- Clusters vs LESIONS_TYPES ---\n")
+print(table(km_samples$cluster, metadata_final$LESIONS_TYPES))
+
+cat("\n--- Clusters vs ROI_TYPES ---\n")
+print(table(km_samples$cluster, metadata_final$ROI_TYPES))
+
+cat("\n--- Clusters vs BRCA_STATUS_PATIENT ---\n")
+print(table(km_samples$cluster, metadata_final$BRCA_STATUS_PATIENT))
+
+```
+
+**Interpretação**
+
+**Estratificação por Tipo de Tecido (ROI)**: clara separação tecidular. O Cluster 1 é predominantemente composto por amostras de *Estroma* (136 vs. 63 epiteliais), indicando que o algoritmo identificou eficazmente a assinatura genética do compartimento de suporte. Por outro lado, o Cluster 2 apresenta-se como um cluster quase exclusivamente *Epitelial* (181 vs. 3 estromais), e o Cluster 3 também demonstra um forte enriquecimento epitelial (153 vs. 16 estromais), confirmando que os clusters 2 e 3 capturam a diversidade do compartimento funcional.
+
+**Gradiente de Progressão Lesional**: observa-se que o Cluster 2 é o cluster de maior densidade para lesões avançadas, concentrando o maior volume de amostras de *Inv Cancer* (87) e *STIC.C* (75). O Cluster 1 (o grupo estromal) e o Cluster 3 apresentam distribuições mais heterogéneas, sugerindo que o perfil transcriptómico de lesões precoces ou incidentais se sobrepõe significativamente com a assinatura de fundo [@Eckert2016].
+
+**Independência do Estado BRCA**: a distribuição das amostras *BRCA1*, *BRCA2* e *WT* é relativamente uniforme através dos três clusters, confirmando que o agrupamento matemático não é impulsionado por viés mutacional germinal, mas sim pela estrutura histológica e pela carga tumoral das amostras [@Jazaeri2002; @Przybytkowski2020].
+
+**Conclusão**
+
+Os resultados do K-means validam a hipótese de que a expressão génica na trompa de Falópio é governada primordialmente pelo compartimento tecidular (segregação clara do Estroma no Cluster 1) e pelo estado de progressão tumoral (distinção entre o Cluster 2, que concentra a maior carga de lesões avançadas, e os restantes clusters). A concordância entre os clusters não supervisionados e as classificações histopatológicas demonstra a alta fidelidade dos dados em mapear a heterogeneidade do microambiente do cancro do ovário, confirmando que a assinatura transcricional é um biomarcador robusto do estado biológico das amostras, independentemente da sua origem germinal [@Kader2025].
+
+# Análise de Redução de Dimensionalidade
+
+Nesta secção, é iniciada a exploração da estrutura global dos dados através de técnicas de redução de dimensionalidade. Dado que a matriz de expressão génica contém milhares de variáveis, é necessário focar a análise nos componentes que detêm a maior carga informativa.
+
+**Filtragem de Atributos**: Selecionaram-se os 1000 genes com maior variância (**Top 1000 HVGs**), uma estratégia que otimiza o sinal biológico e reduz o ruído estatístico [@Ma2011].
+
+**Harmonização de Dados**: A matriz foi transposta para o formato amostras vs. genes, garantindo um alinhamento rigoroso com os metadados clínicos (`metadata_final`). Esta sincronização é vital para que as projeções bidimensionais possam ser corretamente anotadas.
+
+**Configuração de Paletas Cromáticas**: Foram definidas paletas de cores específicas para as variáveis `LESIONS_TYPES`, `ROI_TYPES` e `BRCA_STATUS_PATIENT`, o que permitirá identificar visualmente se as amostras se agrupam no espaço de acordo com a sua identidade biológica ou clínica.
+
+```{r pca-prep-data}
+
+variancia_genes = apply(mrna_final, 1, var)
+top_genes       = names(sort(variancia_genes, decreasing = TRUE))[1:1000]
+mrna_top        = mrna_final[top_genes, ]
+
+cat("Dimensão da matriz original (genes × amostras):", dim(mrna_final), "\n")
+cat("Dimensão após filtragem por variância (top 1000):", dim(mrna_top), "\n")
+
+mrna_t = t(mrna_top)
+cat("Dimensão transposta (amostras × genes):", dim(mrna_t), "\n")
+
+mrna_t = mrna_t[metadata_final$SAMPLE_ID, ]
+cat("Amostras alinhadas com metadados:", all(rownames(mrna_t) == metadata_final$SAMPLE_ID), "\n")
+
+lesion_levels = levels(as.factor(metadata_final$LESIONS_TYPES))
+roi_levels    = levels(as.factor(metadata_final$ROI_TYPES))
+brca_levels   = levels(as.factor(metadata_final$BRCA_STATUS_PATIENT))
+
+pal_lesion = setNames(brewer.pal(min(length(lesion_levels), 11), "Paired"), lesion_levels)
+pal_roi   = setNames(c("steelblue", "tomato"), roi_levels)
+pal_brca   = setNames(brewer.pal(min(length(brca_levels), 8), "Dark2"), brca_levels)
+```
+
+## Análise de Componentes Principais (PCA)
+
+A PCA foi aplicada sobre a matriz de expressão dos 1000 genes mais variáveis para identificar os principais eixos de variação biológica na coorte [@Yeung2001]. Ao contrário das análises de clustering, a PCA permite projetar as amostras num espaço multidimensional onde cada **componente principal** (PC) captura uma fração decrescente da variabilidade total dos dados [@Ma2011]. O procedimento de redução de dimensionalidade é essencial para filtrar o ruído e focar as interpretações biológicas subsequentes nos vetores que realmente distinguem os perfis moleculares das amostras de cancro do ovário e do seu microambiente [@Raychaudhuri2000].
+
+```{r pca-calculation-variance}
+
+set.seed(42)
+pca_res     = prcomp(mrna_t, scale. = FALSE, center = TRUE)
+var_exp     = summary(pca_res)$importance
+pct_var     = round(var_exp[2, ] * 100, 2)
+pct_var_cum = round(var_exp[3, ] * 100, 2)
+
+cat("Variância explicada pelas primeiras 10 PCs:\n")
+print(pct_var[1:10])
+cat("\nVariância acumulada pelas primeiras 10 PCs:\n")
+print(pct_var_cum[1:10])
+
+n_pc_80 = min(which(pct_var_cum >= 80))
+n_pc_90 = min(which(pct_var_cum >= 90))
+cat("\nPCs necessários para explicar 80% da variância:", n_pc_80, "\n")
+cat("PCs necessários para explicar 90% da variância:", n_pc_90, "\n")
+```
+
+**Interpretação** 
+
+Os resultados da PCA demonstram a elevada complexidade biológica da coorte. A *PC1* e a *PC2* explicam, respetivamente, 12.36% e 6.76% da variabilidade total, representando os eixos dominantes de diferenciação nos dados [@Lenz2016].
+
+Observa-se que são necessários 178 componentes principais para capturar 80% da variância acumulada. Este elevado número de PCs reflete a natureza multidimensional da transcriptómica espacial, sugerindo que a expressão génica na trompa de Falópio e no carcinoma do ovário é influenciada por múltiplos processos biológicos independentes e não apenas por um único sinal dominante [@Ma2011]. Contudo, para fins de visualização, as duas primeiras componentes ainda são as mais valiosas, pois contêm o sinal mais forte para a separação dos principais grupos tecidulares e histológicos [@Yeung2001].
+
+## Decomposição de Variância e Análise Biplot (PCA)
+
+A interpretação da PCA foi consolidada através de duas abordagens complementares: a análise da estrutura de variância e a projeção de variáveis (genes) no espaço das componentes principais.
+
+```{r pca-visualization-biplot}
+
+par(mfrow = c(1, 2))
+
+barplot(pct_var[1:20], 
+        names.arg = paste0("PC", 1:20),
+        col       = "steelblue3", 
+        las       = 2, 
+        cex.names = 0.7,
+        main      = "Variância Explicada por PC (%)", 
+        ylab      = "% Variância",
+        border    = NA)
+
+plot(pct_var_cum[1:30], 
+     type = "b", 
+     pch  = 19, col = "tomato3",
+     xlab = "Número de PCs",
+     ylab = "Variância Acumulada (%)",
+     main = "Curva de Variância Acumulada",
+     ylim = c(0, 100))
+abline(h  = 80,      lty = 2, col = "gray50")
+abline(h  = 90,      lty = 2, col = "gray30")
+abline(v  = n_pc_80, lty = 3, col = "steelblue")
+abline(v  = n_pc_90, lty = 3, col = "darkgreen")
+
+legend("bottomright", 
+       legend = c("80% variância", "90% variância"),
+       lty    = c(2, 2), 
+       col    = c("gray50", "gray30"), 
+       bty    = "n", 
+       cex    = 0.8)
+
+par(mfrow = c(1, 1))
+  
+top_load = unique(c(names(sort(abs(pca_res$rotation[,1]), decreasing=TRUE)[1:10]),
+                     names(sort(abs(pca_res$rotation[,2]), decreasing=TRUE)[1:10])))
+
+load_df = data.frame(gene = top_load, 
+                     PC1  = pca_res$rotation[top_load, 1],
+                     PC2  = pca_res$rotation[top_load, 2])
+
+scores_df = data.frame(PC1       = pca_res$x[, 1],
+                       PC2       = pca_res$x[, 2],
+                       PC3       = pca_res$x[, 3],
+                       LESIONS   = metadata_final$LESIONS_TYPES,
+                       ROI       = metadata_final$ROI_TYPES,
+                       BRCA      = metadata_final$BRCA_STATUS_PATIENT,
+                       SAMPLE_ID = metadata_final$SAMPLE_ID)
+
+ggplot() +
+  geom_point(data = scores_df, aes(x = PC1, y = PC2, colour = LESIONS), size = 1.5, alpha = 0.6) +
+  scale_colour_manual(values = pal_lesion) +
+  geom_segment(data = load_df, 
+               aes(x = 0, y = 0, xend = PC1 * 30, yend = PC2 * 30),
+               arrow = arrow(length = unit(0.2, "cm")), 
+               colour = "black", 
+               linewidth = 0.4) +
+  geom_text_repel(data = load_df, aes(x = PC1 * 30, y = PC2 * 30, label = gene), size = 3, colour = "black") +
+  labs(title = "Biplot PCA — Top 10 genes PC1 + PC2", 
+       x = paste0("PC1 (", pct_var[1], "%)"), 
+       y = paste0("PC2 (", pct_var[2], "%)")) +
+  theme_minimal()
+```
+
+**Interpretação**
+
+Os gráficos de variância e o biplot revelam informações cruciais sobre a estrutura biológica da coorte:
+
+**Scree Plot e Curva Acumulada**: observa-se um "cotovelo" após a *PC2*, indicando que as duas primeiras componentes capturam a estrutura principal dos dados. A curva acumulada mostra uma subida gradual, o que confirma a elevada complexidade das amostras de cancro do ovário: a informação biológica está distribuída por muitas dimensões, embora as primeiras sejam as mais discriminatórias [@Bell2011].
+
+**Biplot PCA (PC1 vs PC2)**:
+- *Separação Histológica*: existe uma tendência de agrupamento, as amostras de `Inv Cancer` (cor de laranja) e `STIC.C` (roxo) tendem a situar-se mais para o lado direito e centro-superior do gráfico, enquanto as lesões incidentais e assinaturas de p53 se concentram na parte inferior e esquerda [@Kader2025; @Labidi-Galy2017].
+
+- *Identificação de Outliers*: as amostras no canto superior esquerdo (os pontos avermelhados) apresentam um perfil transcriptómico muito distinto das restantes, o que pode indicar fenótipos extremos/variações [@Bell2011].
+
+- *Vectores de Genes*: as pequenas setas pretas no centro apontam na direção das amostras onde esses genes estão mais expressos. A sua orientação ajuda a definir quais os eixos de expressão que "empurram" as amostras de cancro para fora do grupo normal.
+
+Para aprofundar a compreensão sobre a estrutura de variância da coorte, realizaram-se projeções das amostras em diferentes planos fatoriais: *PC1 vs. PC2* e *PC1 vs. PC3*. Esta abordagem multidimensional é crucial, uma vez que eixos de variação inferiores (como a PC3) podem conter sinais biológicos específicos que são mascarados pelas componentes dominantes.
+
+## Projeção em Diferentes Planos Fatoriais
+
+```{r pca-scores-comparison}
+
+ggplot(scores_df, aes(x = PC1, y = PC2, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) + scale_colour_manual(values = pal_lesion) +
+  labs(title    = "PCA — Scores Plot (PC1 vs PC2)",
+       subtitle = paste0("PC1: ", pct_var[1], "% | PC2: ", pct_var[2], "% da variância"),
+       x        = paste0("PC1 (", pct_var[1], "%)"), 
+       y        = paste0("PC2 (", pct_var[2], "%)"), 
+       colour   = "Tipo de Lesão") +
+  theme_minimal(base_size = 12) + 
+  theme(legend.position = "right")
+
+ggplot(scores_df, aes(x = PC1, y = PC3, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) + 
+  scale_colour_manual(values = pal_lesion) +
+  labs(title = "PCA — Scores Plot (PC1 vs PC3)",
+       subtitle = paste0("PC1: ", pct_var[1], "% | PC3: ", pct_var[3], "% da variância"),
+       x        = paste0("PC1 (", pct_var[1], "%)"), 
+       y        = paste0("PC3 (", pct_var[3], "%)"), 
+       colour   = "Tipo de Lesão") + 
+  theme_minimal(base_size = 12) + 
+  theme(legend.position = "right")
+```
+
+**Interpretação**
+
+A exploração de múltiplas componentes principais permitiu uma compreensão mais profunda da estrutura da coorte:
+
+**PC1 vs PC2**: foca-se na diferenciação principal. Observa-se que a *PC1* (eixo X) parece estar relacionada com a densidade celular ou tipo de tecido, enquanto a *PC2* (eixo Y) ajuda a elevar as amostras de Inv Cancer e STIC.C (tons de laranja e roxo) para a metade superior do gráfico, separando-as de lesões mais basais [@Lenz2016].
+
+**PC1 vs PC3**: a introdução da PC3 revela uma nova camada de organização. As amostras de *Incidental p53 signature* (pontos vermelhos) e *Fimbriae.C* tornam-se mais compactas e se deslocam para quadrantes específicos [@Labidi-Galy2017].
+
+Os "outliers" mantêm-se isolados em ambos os gráficos. Isto sugere que estas amostras (principalmente *p53 signatures* e *STICs incidentais*) possuem um perfil de expressão génica único, muito diferente tanto do tecido normal como do cancro invasivo, o que pode indicar uma via metabólica ou de stresse celular muito específica nestas células precursoras[@Labidi-Galy2017].
+
+## Impacto do Compartimento Tecidular na PCA
+
+Para validar se a estrutura principal de variância dos dados é ditada pelo tipo de tecido, as amostras foram projetadas no plano *PC1 vs. PC2*, desta vez anotadas pelo compartimento tecidular (`ROI_TYPES`).
+
+```{r pca-by-roi}
+
+ggplot(scores_df, aes(x = PC1, y = PC2, colour = ROI, shape = ROI)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_roi) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(title.   = "PCA — Scores Plot (PC1 vs PC2)", 
+       subtitle = "Colorido por Compartimento Tecidular (ROI_TYPES)",
+       x        = paste0("PC1 (", pct_var[1], "%)"), 
+       y        = paste0("PC2 (", pct_var[2], "%)"), 
+       colour   = "ROI", 
+       shape    = "ROI") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A análise da projeção das amostras no plano *PC1 vs. PC2* com anotação por `ROI_TYPES` revela conclusões fundamentais sobre a arquitetura molecular do estudo:
+
+**Dominância da PC1 como Eixo Tecidular**: a separação entre o *Epitélio* (círculos azuis) e o *Estroma* (triângulos laranja) ocorre ao longo do eixo *PC1* (12.36%). Este resultado demonstra que a maior fonte de variação transcriptómica nesta coorte não é a patologia em si, mas sim a linhagem celular [@Lenz2016]. Os perfis de expressão de genes estruturais e de suporte (típicos do estroma) são tão distintos dos genes funcionais e secretores (típicos do epitélio) que o algoritmo os isola naturalmente em polos opostos.
+
+**Heterogeneidade Epitelial vs. Estromal**: as amostras epiteliais apresentam uma maior dispersão vertical ao longo da *PC2* (6.76%) em comparação com as amostras estromais, que se apresentam mais agrupadas. Isto sugere que, enquanto o estroma mantém um perfil relativamente estável, o epitélio sofre variações moleculares muito mais dinâmicas, provavelmente refletindo os diferentes estágios de progressão tumoral [@Wisztorski2023].
+
+**Zonas de Interface**: A existência de uma pequena zona de sobreposição no centro do gráfico é indicativa da natureza da transcriptómica espacial. Estes pontos representam, possivelmente, regiões de interface tecidular onde a captura de mRNA incluiu sinais de ambos os compartimentos, ou áreas onde a sinalização do tumor já alterou significativamente o perfil molecular do estroma adjacente [@Ferri-Borgogno2023; @Yeung2018].
+
+## Impacto do Estatuto Mutacional BRCA na PCA
+
+Para avaliar se o estatuto mutacional exerce um efeito dominante na transcriptómica da coorte, projetou-se a PCA colorida pelo `BRCA_STATUS_PATIENT`.
+
+```{r pca-brca-status}
+
+ggplot(scores_df, aes(x = PC1, y = PC2, colour = BRCA)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_brca) +
+  labs(title    = "PCA — Scores Plot (PC1 vs PC2)", 
+       subtitle = "Colorido por Estatuto Mutacional BRCA",
+       x        = paste0("PC1 (", pct_var[1], "%)"), 
+       y        = paste0("PC2 (", pct_var[2], "%)"), 
+       colour   = "BRCA Status") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção das amostras no plano *PC1 vs. PC2*, colorida pelo BRCA, revela uma distribuição homogénea de todos os grupos ao longo do espaço latente da PCA. Não se observa a formação de clusters distintos baseados no estatuto genético, o que permite concluir que a mutação BRCA, embora de elevada relevância clínica e terapêutica, não impõe uma assinatura de expressão génica global que se sobreponha aos processos biológicos dominantes detetados pelas componentes principais [@Jazaeri2002; @Venkitaraman2002]. Esta ausência de segregação sugere que a arquitetura transcriptómica da trompa de Falópio e das suas lesões é ditada primordialmente pela ROI e pelo estado de progressão da lesão (`LESIONS_TYPES`), sendo robusta face à variação do BRCA.
+
+## Análise de Loadings na PCA
+
+A interpretação biológica das componentes principais foi conduzida através da análise dos *loadings* (pesos) associados a cada gene. Estes quantificam a contribuição de cada variável (gene) para a formação de uma determinada componente principal. Ao calcular o valor absoluto destes pesos, identificámos os 15 genes que mais influenciam a variância nas duas primeiras componentes:
+
+**PC1 (Driver de Diferenciação Tecidular)**: como a *PC1* segrega maioritariamente *Epitélio* de *Estroma*, os genes com loadings mais elevados nesta componente representam os marcadores de linhagem mais robustos da coorte.
+
+**PC2 (Driver de Progressão Lesional)**: Os genes que dominam os loadings da *PC2* são candidatos a biomarcadores de progressão ou de stresse celular, estando frequentemente associados a vias de sinalização que se alteram durante a transição entre lesões precursoras e o carcinoma invasivo.
+
+```{r pca-loadings-analysis}
+
+loadings_pc1 = sort(abs(pca_res$rotation[, 1]), decreasing = TRUE)[1:15]
+loadings_pc2 = sort(abs(pca_res$rotation[, 2]), decreasing = TRUE)[1:15]
+
+par(mfrow = c(1, 2))
+
+barplot(sort(loadings_pc1),
+        horiz     = TRUE,
+        las       = 1,
+        col       = "steelblue3",
+        main      = "Top 15 genes — PC1",
+        xlab      = "|Loading|",
+        cex.names = 0.7,
+        border    = NA)
+
+barplot(sort(loadings_pc2),
+        horiz     = TRUE,
+        las       = 1,
+        col       = "tomato3",
+        main      = "Top 15 genes — PC2",
+        xlab      = "|Loading|",
+        cex.names = 0.7,
+        border    = NA)
+
+par(mfrow = c(1, 1))
+
+cat("Top 15 genes com maior loading em PC1:\n")
+print(names(loadings_pc1))
+cat("\nTop 15 genes com maior loading em PC2:\n")
+print(names(loadings_pc2))
+```
+
+**Interpretação**
+
+1. **PC1 (O Eixo Tecidular — Epitélio vs. Estroma)**
+Ao observar genes como *PTMA* (Protimosina Alfa), *COX5B* (Metabolismo mitocondrial) e *PKM* (Piruvato quinase), percebemos que a *PC1* é dominada por genes de manutenção celular e metabolismo basal [@Bell2011].
+Como estes genes são altamente expressos tanto em tecido epitelial como estromal, eles confirmam que a *PC1* é o eixo de identidade tecidular. 
+A diferença na sua abundância é o que permite ao algoritmo separar tão nitidamente o tecido de suporte do tecido funcional.
+
+2. **PC2 (O Eixo de Progressão e Atividade Tumoral)**
+Encontramos genes com funções mais especializadas como *FZD7* (via *Wnt*, fundamental na sinalização tumoral) [@Asad2014], *MCM10* (essencial para a replicação do DNA — marcador de proliferação) [@Wu2022] e *LAMB1* (matriz extracelular) [@Drapkin2004].
+A *PC2* é claramente o eixo de atividade biológica/malignidade. A presença de genes envolvidos no ciclo celular (*MCM10*) e na remodelação da matriz (*LAMB1*) mostra que esta componente captura a "agressividade" e a transição das lesões, separando as lesões mais inativas (incidentais) das mais ativas (Carcinoma/STIC).
+
+A análise dos genes com maior contributo para as componentes principais revelou que a *PC1* é impulsionada por genes de metabolismo e manutenção celular (ex: *PKM*, *COX5B*), corroborando a sua função como eixo de separação tecidular. Em contraste, a *PC2* é enriquecida por genes envolvidos na proliferação celular e sinalização oncogénica (ex: *MCM10*, *FZD7*), o que valida a sua associação aos processos de progressão lesional observados na coorte.
+
+## Análise por Escalonamento Multidimensional (MDS)
+
+Para reforçar a robustez da análise exploratória, aplicou-se o **Escalonamento Multidimensional (MDS)** clássico sobre a matriz de distâncias euclidianas. Diferente da PCA, que decompõe a variância total, o MDS clássico (também conhecido como *Principal Coordinates Analysis - PCoA*) procura preservar as distâncias de dissimilaridade entre todos os pares de amostras num espaço reduzido.
+
+**Preservação da Geometria**: a projeção das amostras no plano das coordenadas 1 e 2 permite verificar se a estrutura de grupos observada na PCA é um artefacto matemático ou uma realidade geométrica intrínseca aos dados.
+
+**Validação de Resultados**: a convergência entre os padrões observados na PCA e no MDS confere uma validade acrescida às conclusões extraídas. 
+
+```{r mds-classic-scaling}
+
+dist_mrna = dist(scale(mrna_t), method = "euclidean")
+mds_res   = cmdscale(dist_mrna, k = 3, eig = TRUE)
+eig_pos   = mds_res$eig[mds_res$eig > 0]
+var_mds1  = round(mds_res$eig[1] / sum(abs(mds_res$eig)) * 100, 2)
+var_mds2  = round(mds_res$eig[2] / sum(abs(mds_res$eig)) * 100, 2)
+
+cat("MDS — Coordenada 1:", var_mds1, "% da variância\n")
+cat("MDS — Coordenada 2:", var_mds2, "% da variância\n")
+
+mds_df = data.frame(MDS1    = mds_res$points[, 1],
+                    MDS2    = mds_res$points[, 2],
+                    LESIONS = metadata_final$LESIONS_TYPES,
+                    ROI     = metadata_final$ROI_TYPES,
+                    BRCA    = metadata_final$BRCA_STATUS_PATIENT)
+
+ggplot(mds_df, aes(x = MDS1, y = MDS2, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_lesion) +
+  labs(title    = "MDS Clássico — Coordenadas 1 e 2",
+       subtitle = paste0("Coord1: ", var_mds1, "% | Coord2: ", var_mds2, "% da variância"),
+       x        = paste0("Coordenada 1 (", var_mds1, "%)"),
+       y        = paste0("Coordenada 2 (", var_mds2, "%)"),
+       colour   = "Tipo de Lesão") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A aplicação do MDS clássico (*PCoA*) sobre a matriz de distâncias euclidianas produziu um padrão de distribuição das amostras virtualmente idêntico ao observado na PCA, com valores de variância explicada nas primeiras coordenadas de 12.36% e 6.76%. Esta convergência de resultados é de extrema importância por três razões:
+
+**Robustez Matemática**: a equivalência entre a PCA e o MDS clássico baseada em distância euclidiana confirma a integridade dos cálculos [@Mardia1979; @Borg2005]. O padrão observado não é um artefacto de um método específico, mas sim uma propriedade intrínseca da geometria dos teus dados [@Mardia1979; @Borg2005].
+
+**Consistência dos Grupos**: a separação tecidular e a distribuição das patologias mantêm-se constantes, reforçando que os grupos identificados anteriormente são estatisticamente significativos e não flutuam com a mudança de algoritmo.
+
+**Confirmação dos Outliers**: os grupos de amostras 'extremos' (localizados nos quadrantes superiores e laterais dos gráficos anteriores) persistem na mesma configuração espacial no MDS. Isto isola estas amostras como casos de interesse biológico, cujos perfis moleculares divergentes são persistentes e independentes da abordagem estatística.
+
+## Validação por MDS (ROI e BRCA)
+
+**Segregação por Compartimento Tecidular (`ROI_TYPES`)**
+
+```{r mds-comparison-roi}
+
+ggplot(mds_df, aes(x = MDS1, y = MDS2, colour = ROI, shape = ROI)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_roi) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(title    = "MDS Clássico — Coordenadas 1 e 2",
+       subtitle = "Colorido por Compartimento Tecidular (ROI_TYPES)",
+       x        = paste0("Coordenada 1 (", var_mds1, "%)"),
+       y        = paste0("Coordenada 2 (", var_mds2, "%)"),
+       colour   = "ROI", shape = "ROI") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+**Segregação Espacial**: distinção entre as populações de *Epitélio* e *Estroma* é evidenciada pela disposição distinta dos clusters no gráfico, onde o *Epitélio* ocupa preferencialmente o quadrante esquerdo e o *Estroma* se distribui mais à direita.
+
+**Consistência Metodológica**: convergência entre os resultados da PCA e do MDS demonstra que a estrutura de variância dos dados não é um artefacto computacional, mas uma característica biológica intrínseca e sólida da coorte.
+
+**Interação Tecidular**: zona de sobreposição observada no centro do gráfico (onde círculos e triângulos coincidem) sugere regiões de interface tecidular, onde a contaminação espacial de células epiteliais pelo estroma (ou vice-versa) pode estar a influenciar o perfil transcriptómico global, um fenómeno comum em amostras de transcriptómica espacial [@Ferri-Borgogno2023; @Yeung2018].
+
+**Segregação por Estatuto Mutacional `BRCA`**
+
+```{r mds-comparison-brca}
+
+ggplot(mds_df, aes(x = MDS1, y = MDS2, colour = BRCA, shape = BRCA)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_brca) +
+  labs(title    = "MDS Clássico — Coordenadas 1 e 2",
+       subtitle = "Colorido por Estatuto Mutacional BRCA",
+       x        = paste0("Coordenada 1 (", var_mds1, "%)"),
+       y        = paste0("Coordenada 2 (", var_mds2, "%)"),
+       colour   = "BRCA Status") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+**Ausência de Viés de Confundimento**: total sobreposição de formas e cores indica que o perfil de expressão génica global não é ditado pela mutação *BRCA* [@Jazaeri2002; @Venkitaraman2002]. Este resultado é fundamental para o estudo, pois garante que os eixos de variância identificados (especialmente a separação tecidular entre *Epitélio* e *Estroma*) são universais e não representam um artefacto relacionado com a carga mutacional da paciente.
+
+**Robustez do Sinal Biológico**: persistência da estrutura global dos dados, mesmo quando filtrada pelo estatuto *BRCA*, valida a conclusão de que o ROI e a progressão histológica (`LESIONS_TYPES`) são os motores biológicos dominantes, sobrepondo-se à assinatura genómica germinal nesta escala de análise.
+
+## Projeção Não Linear com t-SNE
+
+Complementarmente às abordagens lineares, utilizou-se o algoritmo *t-SNE* para realizar uma projeção não linear das amostras num espaço bidimensional. Enquanto a PCA privilegia a preservação da variância global, o t-SNE foca-se em preservar a estrutura local, minimizando a *divergência de Kullback-Leibler* entre as distribuições de probabilidade que representam as distâncias entre amostras no espaço de alta dimensão e no espaço de projeção [@VanDerMaaten2008].
+
+**Pré-processamento**: previamente à execução, procedeu-se à remoção de duplicados na matriz de expressão para assegurar a convergência do algoritmo. A redução de dimensionalidade foi otimizada através de uma inicialização por PCA (pca = TRUE), prática recomendada para estabilizar a projeção e reduzir o ruído computacional [@VanDerMaaten2008].
+
+**Parâmetros de Otimização**: com uma *perplexity* de $30$, o algoritmo equilibra a retenção de estruturas locais e globais [@VanDerMaaten2008]. Esta técnica permite visualizar se as amostras se organizam em "ilhas"/"nuvens" de identidade biológica, oferecendo uma perspetiva complementar sobre a heterogeneidade da coorte que pode escapar às componentes lineares.
+
+```{r tsne-projection-lesions}
+
+set.seed(42)
+
+dup_rows  = duplicated(mrna_t)
+mrna_t_nd = mrna_t[!dup_rows, ]
+meta_nd   = metadata_final[!dup_rows, ]
+
+cat("Amostras após remoção de duplicados:", nrow(mrna_t_nd), "\n")
+cat("(Duplicados removidos:", sum(dup_rows), ")\n")
+
+tsne_res = Rtsne(mrna_t_nd, 
+                 dims             = 2,
+                 perplexity       = 30,
+                 max_iter         = 1000,
+                 pca              = TRUE,
+                 pca_center       = TRUE,
+                 pca_scale        = FALSE,
+                 check_duplicates = FALSE,
+                 verbose          = FALSE)
+
+tsne_df = data.frame(tSNE1   = tsne_res$Y[, 1],
+                     tSNE2   = tsne_res$Y[, 2],
+                     LESIONS = meta_nd$LESIONS_TYPES,
+                     ROI     = meta_nd$ROI_TYPES,
+                     BRCA    = meta_nd$BRCA_STATUS_PATIENT)
+
+ggplot(tsne_df, aes(x = tSNE1, y = tSNE2, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_lesion) +
+  labs(title    = "t-SNE — Projeção 2D",
+       subtitle = "perplexity = 30 | 1000 iterações | colorido por Tipo de Lesão",
+       x        = "tSNE1",
+       y        = "tSNE2",
+       colour   = "Tipo de Lesão") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção não linear via *t-SNE* revelou uma estrutura de *clusters* muito mais definida do que as projeções lineares anteriores.
+
+**Isolamento das Lesões Malignas**: observa-se que as amostras de `Inv Cancer` (laranja) e `STIC.C` (roxo) tendem a formar grupos distintos e mais isolados (especialmente no quadrante superior esquerdo e superior central). Isto indica que, quando olhamos para a vizinhança local, estas lesões possuem um perfil transcricional que as agrupa fortemente, sugerindo que compartilham vias moleculares muito específicas que as distinguem das lesões pré-cancerosas ou incidentais [@Kader2025; @Labidi-Galy2017].
+
+**Dense Cluster de Lesões Incidentais**: concentração densa de amostras de `Incidental Fimbriae` (verde) e `Incidental p53sig` (vermelho) numa "nuvem2 compacta central sugere uma elevada homologia molecular nestes estágios iniciais ou incidentais. O algoritmo coloca estas amostras próximas umas das outras porque as suas distâncias moleculares locais são muito curtas [@Kader2025; @Labidi-Galy2017].
+
+**Estrutura Local vs. Global**: a forma como algumas amostras de `Inv Cancer` se dispersam sugere uma maior heterogeneidade tumoral (diversidade clonal), enquanto a coesão das amostras incidentais aponta para um estado celular mais estável [@Kader2025].
+
+## Análise Não Linear por Compartimento Tecidular
+
+A projeção não linear via *t-SNE*, colorida pelo compartimento tecidular (`ROI_TYPES`), fornece uma validação suplementar da organização hierárquica dos dados.
+
+```{r tsne-roi-comparison}
+
+ggplot(tsne_df, aes(x = tSNE1, y = tSNE2, colour = ROI, shape = ROI)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_roi) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(title    = "t-SNE — Projeção 2D",
+       subtitle = "Colorido por Compartimento Tecidular (ROI_TYPES)",
+       x        = "tSNE1",
+       y        = "tSNE2",
+       colour   = "ROI", shape = "ROI") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção não linear realizada pelo algoritmo *t-SNE* corrobora, com elevado detalhe local, a segregação tecidular observada anteriormente. Ao contrário das projeções lineares, o t-SNE preserva as vizinhanças locais, permitindo visualizar a coesão dos grupos biológicos.
+
+**Segregação de Alta Resolução**: observa-se que as amostras de *Estroma* (triângulos laranja) formam um grupo extremamente coeso e distinto, sugerindo que o microambiente de suporte possui uma assinatura transcricional muito homogénea [@Denisenko2024; @Wu2022]. Por outro lado, o *Epitélio* (círculos azuis) apresenta-se mais disperso, refletindo a maior diversidade funcional e patológica (diferentes tipos de lesões) intrínseca a este compartimento [@Denisenko2024; @Wu2022].
+
+**Validação por Algoritmos Convergentes**: obtemos uma separação tecidular consistente através de três métodos estatísticos distintos (*PCA, MDS, t-SNE*) confere robustez estatística às conclusões. A *ROI* é, inequivocamente, o principal driver de variação biológica na coorte.
+
+**Interpretação da "Interface"**: os pontos que se encontram nas zonas de transição entre os *clusters* indicam amostras com perfis moleculares intermédios, reforçando que, na biologia tumoral, a fronteira entre epitélio e estroma não é um limite rígido, mas uma zona de constante interação e remodelação molecular [@Ferri-Borgogno2023].
+
+## Independência do Perfil Transcriptómico face ao Estatuto BRCA
+
+Para complementar a investigação sobre a estrutura latente dos dados, a projeção *t-SNE* foi analisada em função do estatuto mutacional `BRCA`. Esta etapa permite para avaliar se a predisposição genética germinal exerce uma influência sistémica no perfil transcricional das amostras que possa mascarar as diferenças biológicas decorrentes da patologia ou do tipo de tecido. Ao aplicar esta projeção não linear, procuramos validar a independência dos sinais moleculares detetados, assegurando que a arquitetura dos *clusters* observados reflete a identidade biológica da lesão e do microambiente, e não um viés decorrente do background genético das pacientes.
+
+```{r tsne-brca-status}
+
+ggplot(tsne_df, aes(x = tSNE1, y = tSNE2, colour = BRCA)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_brca) +
+  labs(title    = "t-SNE — Projeção 2D",
+       subtitle = "Colorido por Estatuto BRCA",
+       x        = "tSNE1",
+       y        = "tSNE2",
+       colour   = "BRCA Status") +
+  theme_minimal(base_size = 12)
+```
+
+A projeção não linear *t-SNE*, anotada pelo `BRCA`, revela uma distribuição estocástica dos grupos em todo o espaço de projeção, sem a formação de clusters segregados [@Jazaeri2002; @Venkitaraman2002].
+
+**Ausência de Estrutura por Genótipo**: homogeneidade na distribuição reforça a conclusão de que o estatuto mutacional germinal não impõe uma assinatura de expressão génica global que sobreponha a identidade biológica ditada pelo ROI ou pelo estado da lesão [@Jazaeri2002; @Venkitaraman2002].
+
+**Validação de Robustez**: A inexistência de um agrupamento por estatuto BRCA em três técnicas de redução de dimensionalidade distintas (*PCA, MDS, t-SNE*) é um indicador robusto de que os resultados obtidos não estão enviesados por fatores de confundimento genético [@Jazaeri2002; @Venkitaraman2002]. A estrutura biológica dominante detetada (*Epitélio vs. Estroma*) é, portanto, independente da predisposição genética da paciente, tornando a tua análise muito mais sólida e generalizável para diferentes perfis clínicos.
+
+## Projeção Não Linear com UMAP
+
+Para capturar a complexidade não linear e as possíveis trajetórias de progressão tumoral, aplicou-se a projeção *UMAP (Uniform Manifold Approximation and Projection)*. Ao contrário de métodos lineares, o *UMAP* é otimizado para preservar a estrutura global dos dados enquanto revela as relações de vizinhança local, sendo ideal para identificar estádios contínuos de transição biológica numa coorte [@McInnes2018]. Esta abordagem permite visualizar não apenas grupos isolados, mas o "*continuum*" molecular que conecta as lesões precursoras às formas invasivas, fornecendo uma visão dinâmica da progressão da doença.
+
+```{r umap-projection}
+
+set.seed(42)
+
+umap_res = umap(scale(mrna_t),
+                n_neighbors  = 15,
+                min_dist     = 0.1,
+                n_components = 2,
+                metric       = "euclidean",
+                verbose      = FALSE)
+
+umap_df = data.frame(UMAP1   = umap_res[, 1],
+                     UMAP2   = umap_res[, 2],
+                     LESIONS = metadata_final$LESIONS_TYPES,
+                     ROI     = metadata_final$ROI_TYPES,
+                     BRCA    = metadata_final$BRCA_STATUS_PATIENT)
+
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_lesion) +
+  labs(title    = "UMAP — Projeção 2D",
+       subtitle = "n_neighbors = 15 | min_dist = 0.1 | colorido por Tipo de Lesão",
+       x        = "UMAP1",
+       y        = "UMAP2",
+       colour   = "Tipo de Lesão") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção *UMAP* revela uma estrutura de dados organizada num "núcleo" central denso com ramificações periféricas distintas:
+
+**Núcleo de Lesões Incidentais**: a grande massa central, onde se concentram as `Incidental Fimbriae`, `Incidental FT` e `p53sig`, representa o espaço de estado basal. Estas lesões formam um cluster compacto porque partilham assinaturas moleculares muito semelhantes, sugerindo que são estados biológicos muito próximos ou partilhados entre pacientes [@Kader2025; @Labidi-Galy2017].
+
+**Ramificações (Divergência Tumoral)**: as amostras de `Inv Cancer` (laranja) e `STIC.C` (roxo) projetam-se para fora deste núcleo central, formando extensões. Isto indica que, à medida que a lesão progride para formas malignas, o perfil transcricional sofre alterações drásticas que o 'afastam' do perfil basal. Este comportamento é clássico em análise de trajetórias e sugere que o *UMAP* conseguiu capturar a direção da agressividade tumoral [@Kader2025; @Labidi-Galy2017].
+
+**Heterogeneidade de Estado**: dispersão das amostras de `Inv Cancer` ao longo de diferentes eixos sugere uma elevada heterogeneidade. Algumas estão mais próximas do núcleo (lesões menos diferenciadas), enquanto outras estão isoladas na periferia (fenótipos agressivos específicos) [@Bell2011].
+
+## Robustez da Identidade Tecidular via UMAP
+
+A análise da projeção não linear UMAP, estratificada pelo compartimento tecidular (`ROI_TYPES`), visa confirmar a consistência da segregação entre os tecidos epitelial e estromal num espaço topológico distinto. Esta abordagem é fundamental para validar se a distinção tecidular — observada anteriormente na PCA e no MDS — se mantém robusta sob uma projeção baseada em vizinhanças locais (*UMAP*), permitindo confirmar que a identidade tecidular é o motor dominante da heterogeneidade transcriptómica nesta coorte.
+
+```{r umap-roi-comparison}
+
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, colour = ROI, shape = ROI)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_roi) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(title    = "UMAP — Projeção 2D",
+       subtitle = "Colorido por Compartimento Tecidular (ROI_TYPES)",
+       x        = "UMAP1",
+       y        = "UMAP2",
+       colour   = "ROI", shape = "ROI") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção UMAP, ao evidenciar a distribuição das amostras por `ROI_TYPES`, confirma a existência de uma arquitetura transcriptómica distinta para os dois compartimentos principais. A topologia revelada pelo algoritmo destaca dois comportamentos biológicos cruciais:
+
+**Coesão do Compartimento Estromal** (Triângulos Laranja): concentração significativa das amostras de estroma no lado esquerdo do gráfico, sugerindo um 'núcleo' de identidade molecular fortemente conservado. Esta coesão indica que o microambiente de suporte, apesar da sua interação com o tumor, mantém uma assinatura transcricional global robusta e distinta daquela do epitélio [@Denisenko2024; @Wu2022].
+
+**Heterogeneidade Epitelial** (Círculos Azuis): o epitélio apresenta uma distribuição muito mais vasta e dispersa, 'abraçando' a nuvem estromal e estendendo-se para o lado direito da projeção. Esta dispersão é um reflexo biológico esperado: o epitélio, sendo o tecido que sofre a transformação neoplásica e onde ocorrem as alterações patológicas mais dinâmicas (desde o normal até ao `Inv Cancer`), exibe naturalmente uma maior plasticidade e heterogeneidade transcricional [@Denisenko2024; @Wu2022].
+
+**Zona de Interface** (Sobreposição Central): a área de intersecção no centro do gráfico representa a interface biológica entre o estroma e o epitélio. Esta transição gradiente é consistente com os dados de transcriptómica espacial, onde a proximidade física e a comunicação parácrina entre estas duas populações celulares se traduzem numa assinatura molecular partilhada [@Ferri-Borgogno2023].
+
+## Validação da Independência do Estatuto BRCA no Espaço UMAP
+
+Para complementar a análise exploratória e garantir a robustez dos resultados, a projeção *UMAP* foi examinada em função do BRCA. Este passo é crucial para descartar a possibilidade de a predisposição genética germinal introduzir um enviesamento sistémico no perfil de expressão génica. O objetivo é assegurar que as assinaturas moleculares observadas refletem inequivocamente a patologia e o microambiente tecidular, mantendo-se independentes do *background* mutacional das pacientes.
+
+```{r umap-brca-status}
+
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, colour = BRCA)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_brca) +
+  labs(title    = "UMAP — Projeção 2D",
+       subtitle = "Colorido por Estatuto Mutacional BRCA",
+       x        = "UMAP1",
+       y        = "UMAP2",
+       colour   = "BRCA Status") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção *UMAP*, anotada pelo **Estatuto Mutacional BRCA**, revela uma distribuição estocástica e homogénea de todas as categorias mutacionais em todo o espaço de projeção [@Jazaeri2002; @Venkitaraman2002].
+
+**Ausência de Estrutura por Genótipo**: A inexistência de *clusters* isolados para pacientes portadoras de mutações BRCA indica que estas não impõem uma alteração global no transcriptoma que seja detetável por algoritmos de redução de dimensionalidade não lineares [@Jazaeri2002; @Venkitaraman2002].
+
+**Validação da Robustez Biológica**: A persistência da estrutura tecidular, que se mantém constante independentemente do estatuto BRCA, valida a robustez dos eixos de variância identificados anteriormente [@Jazaeri2002; @Venkitaraman2002].
+
+**Independência Biológica**: A distribuição uniforme no gráfico confirma que os padrões moleculares detetados são universais para a patologia em estudo. Este resultado é fundamental, pois garante que as conclusões sobre a progressão tumoral e identidade tecidular não são artefactos decorrentes da predisposição genética da coorte, tornando o estudo robusto e isento de enviesamentos [@Jazaeri2002; @Venkitaraman2002].
+
+## PCA em Dados de Intensidade Proteica
+
+A análise de PCA foi aplicada sobre o conjunto de dados de intensidades proteicas, visando a redução de dimensionalidade e a identificação de padrões de variância global na coorte. Dado que as intensidades de sinal podem apresentar variações significativas de escala, procedeu-se à normalização das variáveis (*scale = TRUE*)* e à centralização da média (*center = TRUE*). Este pré-processamento é permite garantir que a PCA reflita as diferenças biológicas genuínas, e não artefactos técnicos resultantes da disparidade nas escalas de quantificação entre diferentes proteínas, permitindo uma representação equitativa da contribuição de cada variável para a estrutura latente dos dados.
+
+```{r pca-protein-intensity}
+
+intensity_cols  = colnames(metadata_final)[14:61]
+intensidade_mat = as.matrix(metadata_final[, intensity_cols])
+intensidade_mat = apply(intensidade_mat, 2, function(x) as.numeric(as.character(x)))
+
+var_prot        = apply(intensidade_mat, 2, var, na.rm = TRUE)
+intensidade_mat = intensidade_mat[, var_prot > 0 & !is.na(var_prot)]
+pca_prot        = prcomp(intensidade_mat, scale. = TRUE, center = TRUE)
+
+summary(pca_prot)
+```
+
+**Interpretação**
+
+A análise de PCA realizada sobre as intensidades proteicas revelou uma estrutura de variância altamente informativa. O comportamento do *summary* da PCA permite destacar os seguintes pontos [@Lin2018; @Yeung2001]:
+
+* **Dominância da Componente Principal 1 (PC1)**: a PC1 explica 28.29% da variância total da amostra. Em dados biológicos de alta dimensão, este é um valor bastante expressivo, indicando que existe um fator biológico dominante que separa as amostras — muito provavelmente a identidade tecidular (*Epitelial vs. Estroma*), tal como observado nas análises transcriptómicas anteriores.
+
+* **Sinal vs. Ruído**: queda acentuada na proporção de variância após a PC1 (de 28.29% para 7.11% na PC2) sugere que a estrutura dos dados é dominada por um eixo principal de variação, sendo as restantes componentes responsáveis por capturar a heterogeneidade subtil e o ruído técnico.
+
+* **Eficiência da Redução de Dimensionalidade**: proporção acumulada demonstra que as primeiras 10 componentes (PC1 a PC10) explicam aproximadamente 71.6% da variância total. Isto confirma que a maioria da informação biológica relevante está contida num subespaço dimensional reduzido, validando a eficácia do pré-processamento aplicado e a qualidade da matriz de intensidades proteicas.
+
+* **Estabilidade Numérica**: presença de 48 componentes reflete a alta dimensionalidade original dos dados. A estabilidade das componentes, com a variância a decair suavemente após a PC10, é um indicador de que não há colinearidade extrema ou redundância excessiva que pudesse comprometer a análise.
+
+## Visualização da Estrutura das Lesões via PCA (Dados Proteicos)
+
+Para visualizar a estrutura latente dos dados de intensidade proteica, procedeu-se à projeção das amostras num espaço bidimensional definido pelas duas primeiras componentes principais (*PC1* e *PC2*). Esta visualização permite avaliar se o perfil proteico, capturado por *CyCIF*, é capaz de estratificar as diferentes patologias (`LESIONS_TYPES`), constituindo um complemento essencial à análise de variância previamente efetuada. A utilização de uma paleta de cores consistente permite verificar a coesão dos grupos patológicos num espaço dimensional reduzido, validando a capacidade discriminatória da assinatura proteica na caracterização da progressão tumoral.
+
+```{r pca-protein-lesions-plot}
+
+pct_prot    = round(summary(pca_prot)$importance[2, ] * 100, 2)
+scores_prot = data.frame(
+  PC1     = pca_prot$x[, 1],
+  PC2     = pca_prot$x[, 2],
+  LESIONS = metadata_final$LESIONS_TYPES,
+  ROI     = metadata_final$ROI_TYPES)
+
+ggplot(scores_prot, aes(x = PC1, y = PC2, colour = LESIONS)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_lesion) +
+  labs(title    = "PCA — Intensidades Proteicas CyCIF",
+       subtitle = paste0("PC1: ", pct_prot[1], "% | PC2: ", pct_prot[2], "% | colorido por Tipo de Lesão"),
+       x        = paste0("PC1 (", pct_prot[1], "%)"),
+       y        = paste0("PC2 (", pct_prot[2], "%)"),
+       colour   = "Tipo de Lesão") +
+  theme_minimal(base_size = 12)
+```
+
+**Interpretação**
+
+A projeção das intensidades proteicas (*CyCIF*) nas duas primeiras componentes principais (*PC1* e *PC2*) revela uma estrutura de dados organizada num eixo de variação contínuo, que se afasta de um núcleo basal.
+
+**Eixo de Progressão (PC1)**: a PC1, que retém 28.29% da variância total, atua como o eixo de malignidade. Observa-se que as lesões incidentais e pré-cancerosas formam um *cluster* denso junto à origem ($PC1 ≈ 0$), representando o estado de "homeostasia tecidular"[@Kader2025].
+
+**Divergência Tumoral**: à medida que avançamos ao longo do eixo positivo da *PC1*, ocorre uma dispersão progressiva das amostras. As lesões de `Inv Cancer` (laranja) e `STIC.C` (roxo) desviam-se significativamente deste núcleo, deslocando-se para a direita do gráfico [@Kader2025]. Isto sugere que a transformação para um estado invasivo implica alterações profundas e direcionais no perfil de expressão proteica, que se tornam mais acentuadas à medida que a neoplasia progride [@Kader2025].
+
+**Consistência Multimodal**: esta visualização valida os resultados obtidos na transcriptómica. A confirmação de que as lesões invasivas ocupam um espaço distinto no proteoma, afastando-se do estado basal, demonstra que o fenótipo tumoral capturado pelo *CyCIF* é concordante com a assinatura genómica (mRNA). A biologia tumoral está, assim, validada em duas camadas moleculares diferentes [@Lin2018; @Wisztorski2023].
+
+### Validação da Arquitetura Tecidular via Proteómica
+
+A análise PCA foi estratificada pelo compartimento tecidular (`ROI_TYPES`) para avaliar se a identidade tecidular — *Epitélio vs. Estroma* — se mantém como o determinante primário da variância no proteoma capturado por *CyCIF*. Esta validação cruzada entre os dados transcriptómicos (mRNA) e os dados proteicos é fundamental para confirmar que a estrutura de dados é biologicamente consistente e que o perfil proteico, apesar da sua especificidade, obedece à mesma organização arquitetural básica observada no nível genómico. A observação de uma segregação clara nesta projeção reforçará a robustez do teu modelo integrativo.
+
+```{r pca-protein-roi}
+
+ggplot(scores_prot, aes(x = PC1, y = PC2, colour = ROI, shape = ROI)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_colour_manual(values = pal_roi) +
+  scale_shape_manual(values = c(16, 17)) +
+  labs(title    = "PCA — Intensidades Proteicas CyCIF",
+       subtitle = paste0("PC1: ", pct_prot[1], "% | PC2: ", pct_prot[2], "% | colorido por ROI_TYPES"),
+       x        = paste0("PC1 (", pct_prot[1], "%)"),
+       y        = paste0("PC2 (", pct_prot[2], "%)"),
+       colour   = "ROI",
+       shape    = "ROI") +
+  theme_minimal(base_size = 12)
+
+```
+
+**Interpretação**
+
+A análise da projeção PCA das intensidades proteicas revela uma arquitetura distinta da observada nos dados transcriptómicos:
+
+**Interdependência Molecular**: ao contrário da segregação nítida observada no mRNA, a projeção proteica revela uma maior sobreposição entre o *Epitélio* (azul) e o *Estroma* (laranja). Isto sugere que, ao nível proteico, o perfil de expressão capturado pelo painel *CyCIF* partilha marcadores comuns ou exibe uma comunicação parácrina mais intensa, resultando num espaço de variabilidade compartilhado [@Lin2018].
+
+**O Eixo de Variação (PC1)**: Embora exista uma sobreposição, nota-se que o *Estroma* (triângulos) tende a estender-se mais ao longo do eixo positivo da *PC1*, enquanto o *Epitélio* (círculos) mantém uma densidade maior em torno da origem. Esta organização indica que, apesar da sobreposição, existe um 'gradiente' de identidade tecidular que a *PC1* ainda consegue capturar parcialmente.
+
+**Concordância Multiómica**: enquanto o transcriptoma reflete a identidade celular "pura" e distinta, o proteoma (especialmente em painéis de *CyCIF* direcionados) reflete frequentemente o estado funcional e o microambiente local, onde a distinção entre compartimentos é menos discreta e mais contínua [@Lin2018; @Wisztorski2023].
+
+## Segmentação do Espaço Latente por K-means
+Para a identificação de subpopulações biológicas na coorte, procedeu-se à aplicação do algoritmo de clustering não supervisionado **K-means** sobre o espaço reduzido definido pelas 20 primeiras PCs. A utilização das componentes principais, em vez da matriz de expressão bruta, permite capturar a estrutura de variância global da coorte, eliminando o ruído e aumentando a estabilidade dos *clusters*. O número ideal de clusters ($k=3$) foi determinado através do método **Elbow**, validando a existência de divisões naturais no transcriptoma tumoral [@Tibshirani2001; @MacQueen1967]. Esta segmentação visa não apenas agrupar amostras, mas identificar estados biológicos latentes que possam estar associados a diferentes fenótipos de progressão lesional.
+
+```{r kmeans-pca-integration}
+
+set.seed(42)
+inertia = sapply(1:10, function(k) kmeans(pca_res$x[, 1:20], centers = k, nstart = 25)$tot.withinss)
+
+plot(1:10, inertia, 
+     type = "b", 
+     pch  = 19, 
+     col  = "steelblue3",
+     xlab = "Número de clusters (k)", ylab = "Inércia (tot.withinss)",
+     main = "Elbow Plot — Escolha de k para K-means")
+
+set.seed(42)
+km = kmeans(pca_res$x[, 1:20], centers = 3, nstart = 25)
+
+scores_df$Cluster = factor(km$cluster)
+
+shapes_manual = c("Cancer Floating"     = 0, 
+                  "Incidental FT"       = 1, 
+                  "Incidental Fimbriae" = 2, 
+                  "Incidental STIC"     = 5, 
+                  "Incidental p53sig"   = 6, 
+                  "Inv Cancer"          = 15, 
+                  "Serous Carcinoma"    = 16, 
+                  "STIC.C"              = 17, 
+                  "STIC.I"              = 18, 
+                  "STIL.C"              = 4,  
+                  "STIL.I"              = 8)
+
+ggplot(scores_df, aes(x = PC1, y = PC2, color = Cluster, shape = LESIONS)) +
+  geom_point(alpha = 0.7, size = 2.5) +
+  scale_shape_manual(values = shapes_manual) +
+  scale_color_brewer(palette = "Set2")+
+  theme_minimal() +
+  labs(title    = "PCA + K-means (k=3)",
+       subtitle = "Cor = Cluster (K-means), Forma = Tipo de Lesão Biológica",
+       x        = paste0("PC1 (", pct_var[1], "%)"),
+       y        = paste0("PC2 (", pct_var[2], "%)"),
+       shape    = "Lesão",
+       color    = "Cluster")
+```
+
+**Interpretação**
+
+1. **Determinação do número ótimo de clusters ($k$) via Elbow PlotAnálise**: apresenta a evolução da inércia total (`tot.withinss`) em função do número de clusters ($k$). O objetivo deste método é identificar o *elbow point*, onde a taxa de redução da inércia diminui significativamente, sugerindo um ponto de inflexão ideal para a segmentação. A curva apresenta uma queda acentuada entre $k=1$ e $k=2$, e uma transição relevante entre $k=2$ e $k=3$ [@Tibshirani2001; @MacQueen1967]. A partir de $k=3$, a curva tende a estabilizar, indicando que adicionar mais grupos resultaria numa fragmentação excessiva da variância com ganhos marginais na separação biológica. Portanto, a seleção de $k=3$ é estatisticamente justificada como o compromisso ótimo entre a simplificação do modelo e a representatividade da heterogeneidade biológica da coorte [@Tibshirani2001; @MacQueen1967].
+
+2. **Validação da Segmentação no Espaço PCA ($k=3$)**: a visualização dos clusters no espaço das duas primeiras componentes principais (PC1: 12.36%, PC2: 6.76%) demonstra uma estratificação robusta das amostras, validando a eficácia do algoritmo K-means na captura da estrutura latente dos dados.
+
+**Coesão e Separação**: os clusters apresentam uma separação espacial clara, indicando que o algoritmo identificou três "assinaturas" moleculares distintas. A ausência de sobreposição excessiva entre o *Cluster 1* (verde) e o *Cluster 2* (laranja) sugere que estas subpopulações representam estados biológicos fundamentalmente diferentes.
+
+**Associação com a Patologia**: existe uma correlação visível entre os clusters (cores) e os tipos de lesão (formas) [@Kader2025; @Labidi-Galy2017]:
+
+- **Cluster 1 (Verde)**: concentra predominantemente lesões incidentais e estados de baixa agressividade, ocupando a região mais negativa do eixo *PC1*. Isto sugere que este cluster representa o "estado basal" ou pré-neoplásico.
+
+- **Cluster 2 (Laranja)**: apresenta uma elevada densidade de amostras de `Inv Cancer` (quadrados), situando-se em regiões positivas da *PC1* e *PC2*. Este agrupamento é um forte indicador de que o perfil molecular deste cluster está intrinsecamente ligado à progressão tumoral invasiva.
+
+- **Cluster 3 (Azul)**: Ocupa uma posição intermédia ou de transição na região inferior do gráfico. A mistura de formas neste cluster sugere uma maior heterogeneidade fenotípica ou estados de transição.
+
+A integração de K-means com PCA não apenas confirma a existência de subgrupos estatisticamente distintos, mas também demonstra que a variância capturada pelos eixos principais (*PC1*/*PC2*) reflete um gradiente de progressão maligna, desde estados incidentais/benignos até fenótipos invasivos [@Kader2025; @Labidi-Galy2017]. Esta validação reforça a fiabilidade dos grupos identificados para análises de expressão diferencial posteriores.
+
+## Exportação de Resultados
+
+```{r export-dimension-reduction-results}
+
+scores_export = data.frame(SAMPLE_ID = metadata_final$SAMPLE_ID,
+                           pca_res$x[, 1:min(30, ncol(pca_res$x))],
+                           LESIONS_TYPES       = metadata_final$LESIONS_TYPES,
+                           ROI_TYPES           = metadata_final$ROI_TYPES,
+                           BRCA_STATUS_PATIENT = metadata_final$BRCA_STATUS_PATIENT)
+
+write.csv(scores_export, file = "PCA_Scores_Fase2.csv", row.names = FALSE)
+
+umap_export = data.frame(SAMPLE_ID     = metadata_final$SAMPLE_ID,
+                         UMAP1         = umap_df$UMAP1,
+                         UMAP2         = umap_df$UMAP2,
+                         LESIONS_TYPES = metadata_final$LESIONS_TYPES,
+                         ROI_TYPES     = metadata_final$ROI_TYPES)
+
+write.csv(umap_export, file = "UMAP_Coordenadas_Fase2.csv", row.names = FALSE)
+
+write.csv(mds_df, file = "MDS_Coordenadas_Fase2.csv", row.names = FALSE)
+
+write.csv(tsne_df, file = "tSNE_Coordenadas_Fase2.csv", row.names = FALSE)
+
+kmeans_export = data.frame(
+  SAMPLE_ID   = metadata_final$SAMPLE_ID,
+  Cluster     = km_samples$cluster,
+  LESIONS     = metadata_final$LESIONS_TYPES,
+  ROI         = metadata_final$ROI_TYPES,
+  BRCA        = metadata_final$BRCA_STATUS_PATIENT)
+write.csv(kmeans_export, file = "Kmeans_Clusters_Fase2.csv", row.names = FALSE)
+
+loadings_export = data.frame(
+  Gene    = c(names(loadings_pc1), names(loadings_pc2)),
+  PC      = c(rep("PC1", 15), rep("PC2", 15)),
+  Loading = c(loadings_pc1, loadings_pc2))
+write.csv(loadings_export, file = "PCA_Loadings_Fase2.csv", row.names = FALSE)
+
+write.csv(scores_prot, file = "PCA_Proteica_Scores_Fase2.csv", row.names = FALSE)
+
+write.csv(as.data.frame(table(km_samples$cluster, metadata_final$LESIONS_TYPES)),
+          file = "Kmeans_Contingencia_Fase2.csv", row.names = FALSE)
+
+cat("Ficheiros exportados com sucesso.\n")
+```
+
+# Conclusão - Síntese da Paisagem Molecular do Microambiente Tumoral
+
+A presente análise bioinformática, estruturada através da integração de dados de transcriptómica espacial e proteómica *CyCIF*, permitiu delinear a paisagem molecular da trompa de Falópio e a sua transição para o carcinoma do ovário [@Labidi-Galy2017]. 
+
+A aplicação de técnicas complementares de redução de dimensionalidade (*PCA, MDS, t-SNE, UMAP*) e algoritmos de clustering não supervisionado (*Hierárquico* e *K-means*) revelou uma hierarquia biológica bem definida na organização da coorte.
+
+Em primeiro lugar, a segregação tecidular (*Epitélio vs. Estroma*) foi identificada como o determinante primário da variabilidade transcricional e proteica em todas as projeções computacionais [@Denisenko2024; @Wu2022]. Esta distinção robusta, capturada quer pelas componentes lineares, quer pelas estruturas de vizinhança local, sublinha a importância fundamental do compartimento tecidular na definição da identidade celular e funcional do microambiente tumoral.
+
+Em segundo lugar, a análise evidenciou a existência de um eixo de progressão tumoral, validado pela transição contínua observada no *UMAP* e confirmada pelos clusters de *K-means* ($k=3$). Este gradiente molecular, que conecta lesões incidentais e precursoras (caracterizadas por estados de "homeostasia tecidular") a lesões invasivas (como o `Inv Cancer` e `STIC.C`), demonstra que a malignidade não surge de um evento isolado, mas de um processo de diferenciação transcriptómica e proteica progressivo [@Kader2025; @Labidi-Galy2017]. 
+
+Adicionalmente, a ausência de segregação associada ao estatuto mutacional *BRCA* confere uma validade acrescida aos resultados [@Jazaeri2002; @Przybytkowski2020]. A independência da arquitetura tecidular e dos eixos de progressão face ao background germinal das pacientes assegura que as assinaturas moleculares detetadas são, de facto, biomarcadores universais da progressão da patologia nesta coorte, e não artefactos de predisposição genética.
+
+Em suma, a convergência metodológica entre os dados de RNA e de proteína permitiu validar a heterogeneidade intrínseca do cancro do ovário [@Denisenko2024]. Os resultados obtidos constituem uma base sólida para futuras análises de expressão diferencial e para a identificação de alvos terapêuticos específicos que possam ser validados funcionalmente na transição entre o tecido saudável, as lesões de alto risco e o carcinoma invasivo.
+
+# Referências Bibliográficas

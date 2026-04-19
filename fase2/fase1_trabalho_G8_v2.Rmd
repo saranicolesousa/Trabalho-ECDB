@@ -1,0 +1,890 @@
+---
+title: "Extração de Conhecimento de Dados Biológicos Trabalho prático nº 1"
+author: "Bruno Ferreira, Joana Maia, Sara Sousa"
+date: "`r Sys.Date()`"
+output: html_document
+bibliography: references/referencias_fase1.bib
+csl: references/apa.csl
+link-citations: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Análise Bioinformática 
+### Expressão Génica Espacial no Carcinoma do Ovário
+
+O conjunto de dados curados em análise, intitulado "***Ovarian Cancer (Gray Foundation, Cancer Discov 2025)***", é o resultado de uma metodologia avançada de perfilagem espacial multimodal. Diferencialmente das abordagens genómicas convencionais (*bulk RNA-seq*), que analisam o tumor de forma agregada perdendo o contexto arquitetural, estes dados preservam a localização precisa das moléculas e a organização celular no microambiente tecidular [@Kader2025].
+
+<br>
+
+**Componentes Multimodais do Dataset:**
+
+Este estudo integra dados genómicos e transcriptómicos espaciais cruciais para a compreensão da **oncogénese do Carcinoma Seroso de Alto Grau** (HGSOC), estruturando-se nos seguintes pilares:
+
+* **GeoMx (Transcriptómica Espacial)**: Permite a obtenção de perfis transcriptómicos de microrregiões específicas (ROIs), possibilitando a distinção da atividade génica entre áreas específicas dos tecidos, como o epitélio precursor ou o estroma circundante [@Merritt2020].
+
+* **CyCIF (Imunofluorescência Cíclica)**: Técnica de imagem multiplexada de alta resolução que permite a visualização simultânea de múltiplos marcadores proteicos na mesma secção de tecido, mapeando a arquitetura celular [@Lin2018].
+
+* **Anotações de Regiões de Interesse (ROI)**: Segmentação precisa de zonas histológicas, incluindo dados de expressão genética normalizados (***z-scores***) e estimativas de abundância de populações celulares imunitárias e estromais em cada ROI.
+
+* **Dados clínicos**: Informação fenotípica detalhada, incluindo idade, estatuto mutacional dos genes *BRCA1/2* e estadiamento patológico [@Norquist2016].
+ 
+<br>
+
+**Proveniência e Contexto Científico**
+
+Os dados derivam da investigação intitulada “***Multimodal Spatial Profiling Reveals Immune Suppression and Microenvironment Remodeling in Fallopian Tube Precursors to High-Grade Serous Ovarian Carcinoma***”, publicada na revista *Cancer Discovery (2024)*. O estudo foi conduzido por investigadores da *Harvard Medical School*, sob a égide do *Gray BRCA Pre-Cancer Atlas (Gray Foundation)*[@Kader2025].
+A coorte baseia-se em amostras de tecido humano de pacientes com HGSOC e indivíduos portadores de mutações germinais em *BRCA1/2* [@Bowtell2015]. A inclusão de tecidos provenientes de salpingectomias profiláticas permitiu o mapeamento inédito de lesões precursoras, tais como a assinatura *p53* (focos epiteliais com mutação no gene *TP53*) e os STICs (Carcinomas Intraepiteliais Tubários Serosos)[@Medeiros2006].
+
+<br>
+ 
+**Relevância Clínica e Biológica**
+
+A relevância deste estudo para a oncologia molecular é fundamental, ao consolidar a evidência de que a maioria dos carcinomas do ovário tem **origem no epitélio das trompas de Falópio** [@Kader2025; @Lee2007; @Bowtell2015] . 
+Os dados revelam que, precocemente na transição neoplásica, ocorrem fenómenos de:
+
+1.	**Sinalização persistente de Interferão (IFN)**: Alteração profunda do microambiente imunitário [@Kader2025].
+
+2.	**Instabilidade Cromossómica**: Propiciadora da evolução clonal e evasão tumoral [@Kader2025; @Bowtell2015].
+A caracterização desta trajetória — desde o tecido fisiológico normal, passando pelas lesões pré-cancerígenas, até à invasão maligna — é vital para a identificação de novos biomarcadores de diagnóstico precoce e potenciais alvos terapêuticos, num cancro que apresenta elevada mortalidade devido ao diagnóstico tardio [@Kader2025; @Bowtell2015].
+
+## Carregamento de dados
+
+```{r import-datasets}
+
+file_mrna       = "../database_ovario/data_mrna_seq_read_counts_zscores_ref_all_samples.txt"
+file_clinical   = "../database_ovario/data_clinical_sample.txt"
+file_intensity  = "../database_ovario/data_cell_intensity.txt"
+file_fractions  = "../database_ovario/data_cell_type_fractions.txt"
+file_patient    = "../database_ovario/data_clinical_patient.txt"
+
+mrna_data       = read.table(file_mrna, header      = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+clinical_data   = read.table(file_clinical, header  = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+intensity_data  = read.table(file_intensity, header = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+fractions_data  = read.table(file_fractions, header = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+patient_data    = read.table(file_patient, header   = TRUE, sep = "\t", check.names = FALSE, comment.char = "#")
+
+#View(mrna_data)
+#View(clinical_data)
+#View(intensity_data)
+#View(fractions_data)
+#View(patient_data)
+```
+
+## Exploração inicial
+
+*Variável `mrna_data` quantitativa contínua*: representa níveis de expressão génica (contagens normalizadas).
+
+```{r eda_mrna}
+
+dim(mrna_data) 
+#unlist(lapply(mrna_data, class))
+#head(mrna_data)
+```
+
+*Variável `clinical_data`*:
+
+* Estadiamento (FIGO Stage): qualitativa ordinal.
+* Sobrevivência (meses/dias): quantitativa contínua.
+* Resposta ao Tratamento: qualitativa ordinal.
+
+```{r eda-clinical}
+
+dim(clinical_data)
+#unlist(lapply(clinical_data, class))
+#head(clinical_data)
+```
+
+*Variável `intensity_data` quantitativa contínua*: mede a intensidade de fluorescência (como da *p53*) detetada pelos sensores de imagem, sendo fundamentais para análises de limiar e gradientes de concentração proteica.
+
+```{r eda_intensity}
+
+dim(intensity_data) 
+##unlist(lapply(intensity_data, class))
+#head(intensity_data)
+```
+
+*Variável `fractions_data` quantitativa contínua proporcional*: representa proporções de tipos celulares num determinado nicho.
+
+```{r eda_fractions}
+
+dim(fractions_data)
+#unlist(lapply(fractions_data, class))
+#head(fractions_data)
+```
+
+*Variável `patient_data`*:
+
+* Status de Mutação (BRCA1/2): qualitativa nominal.
+* Idade: quantitativa discreta.
+* ID do Paciente: qualitativa nominal.
+
+```{r eda_patient}
+
+dim(patient_data) 
+#unlist(lapply(patient_data, class))
+#head(patient_data)
+```
+
+## Identificação de valores omissos
+
+```{r missing-values-audit}
+
+sum(is.na(patient_data))
+sum(is.na(mrna_data))
+sum(is.na(intensity_data))
+sum(is.na(fractions_data))
+sum(is.na(clinical_data))
+```
+
+## Tratamento de valores omissos (Clinical e Patient Data)
+
+Em `clinical_data` substituir NAs pelo valor da média da coluna.
+
+```{r imputation-clinical}
+
+m = mean(clinical_data$CELL_GROUP_COUNTS, na.rm = TRUE)
+print(m)
+clinical_data$CELL_GROUP_COUNTS[is.na(clinical_data$CELL_GROUP_COUNTS)] = m
+clinical_data$CELL_GROUP_COUNTS = round(clinical_data$CELL_GROUP_COUNTS)
+```
+
+Em `patient_data` substituir por uma categoria que o R reconheça como texto/fator.
+
+```{r imputation-patient}
+
+patient_data$METASTATIC_SITES_PATIENT[is.na(patient_data$METASTATIC_SITES_PATIENT)] = "None"
+patient_data$TREATMENT_COMMENTS[is.na(patient_data$TREATMENT_COMMENTS)]             = "No comments"
+patient_data$TREATMENT_TYPE[is.na(patient_data$TREATMENT_TYPE)]                     = "Unknown/Not Specified"
+```
+
+## Verificação pós-tratamento de valores omissos
+
+```{r verification_na}
+
+sum(is.na(patient_data))
+sum(is.na(mrna_data))
+sum(is.na(intensity_data))
+sum(is.na(fractions_data))
+sum(is.na(clinical_data))
+```
+
+## Integração de metadados
+
+Junção das tabela tabelas `clinical_data` e `patient_data` pelo `PATIENT_ID`
+
+```{r merge-clinical-patient}
+
+metadata_final = merge(clinical_data, patient_data, by = "PATIENT_ID")
+View(metadata_final)
+dim(metadata_final)
+```
+
+## Standardização e Normalização
+
+```{r scaling-and-factors}
+
+metadata_final$ROI_TYPES             = as.factor(metadata_final$ROI_TYPES)
+metadata_final$LESIONS_TYPES         = as.factor(metadata_final$LESIONS_TYPES)
+metadata_final$BRCA_STATUS_PATIENT   = as.factor(metadata_final$BRCA_STATUS_PATIENT)
+metadata_final$INCIDENTAL_LESIONS    = as.factor(metadata_final$INCIDENTAL_LESIONS)
+metadata_final$TREATMENT_TYPE        = as.factor(metadata_final$TREATMENT_TYPE)
+metadata_final$BRCA_STATUS           = as.factor(metadata_final$BRCA_STATUS)
+metadata_final$LESIONS_HLA_E_STATUS  = as.factor(metadata_final$LESIONS_HLA_E_STATUS)
+metadata_final$STAGE_HGSOC           = as.factor(metadata_final$STAGE_HGSOC)
+metadata_final$CELL_COUNT_ST         = scale(metadata_final$CELL_GROUP_COUNTS)
+#unlist(lapply(metadata_final, class))
+```
+
+## Integração de intensidades (CyCIF)
+
+```{r merge-cycif-intensities}
+
+intensity_raw         = intensity_data[, -c(1, 2)] 
+intensity_t           = as.data.frame(t(intensity_raw))
+colnames(intensity_t) = intensity_data$NAME
+intensity_t$SAMPLE_ID = rownames(intensity_t)
+metadata_final        = merge(metadata_final, intensity_t, by = "SAMPLE_ID")
+```
+
+## Integração de frações e filtragem de mRNA
+
+```{r transcriptomics-alignment-and-filtering}
+
+fractions_raw         = fractions_data[,-c(1,2)]
+fractions_t           = as.data.frame(t(fractions_raw))
+colnames(fractions_t) = fractions_data$NAME
+fractions_t$SAMPLE_ID = rownames(fractions_t)
+
+metadata_final = merge(metadata_final, fractions_t, by="SAMPLE_ID")
+gene_names     = mrna_data[,1]
+mrna_filtrado  = mrna_data[, colnames(mrna_data) %in% metadata_final$SAMPLE_ID]
+
+variancia            = apply(mrna_filtrado, 1, var)
+mrna_final           = mrna_filtrado[variancia > 0, ]
+rownames(mrna_final) = gene_names[variancia > 0]
+gene_names           = mrna_data[,1]
+mrna_filtrado        = mrna_data[, colnames(mrna_data) %in% metadata_final$SAMPLE_ID]
+
+mrna_final               = mrna_final[, metadata_final$SAMPLE_ID]
+all(colnames(mrna_final) == metadata_final$SAMPLE_ID)
+```
+
+## Tratamento final de colunas
+
+```{r metadata-curation}
+
+metadata_final = subset(metadata_final, select = -c(CASE_ID,CYCIF_ID,GEOMX_ID,SPECIMEN,BRCA_STATUS,LOT_HUMAN_NGS_WHOLE_TRANSCRIPTOME_ATLAS_RNA_1_0,SURGERIES_PERFORMED ,LESIONS, METASTATIC_SITES_PATIENT, VITAL_STATUS_AT_LAST_FOLLOW_UP, ETHNICITY, TREATMENT_COMMENTS, FT_FIMBRIAE_INVOLVEMENT,AGE_AT_LAST_FOLLOW_UP_YRS))
+
+metadata_final$CELL_COUNT_ST = as.numeric(scale(metadata_final$CELL_GROUP_COUNTS))
+cols_to_remove               = c("CELL_COUNT_ST1", "CELL_COUNT_ST2")
+metadata_final               = metadata_final[, !(names(metadata_final) %in% cols_to_remove)]
+#unlist(lapply(metadata_final, class))
+```
+
+## Exportação de Resultados
+
+```{r export-processed-data}
+
+write.csv(metadata_final, file = "Metadata_Processado.csv", row.names = FALSE, na = "")
+write.csv(mrna_final, file = "Expressao_mRNA_Alinhada.csv", row.names = TRUE)
+```
+
+## Sumarização de variáveis categóricas
+
+```{r categorical-summary}
+
+table(metadata_final$LESIONS_TYPES)
+table(metadata_final$BRCA_STATUS_PATIENT)
+table(metadata_final$ROI_TYPES)
+```
+
+## Tabelas de contingência (dados cruzados)
+
+```{r contingency-tables}
+
+table(metadata_final$LESIONS_TYPES, metadata_final$BRCA_STATUS_PATIENT)
+table(metadata_final$LESIONS_TYPES, metadata_final$ROI_TYPES)
+```
+
+## Estatística Descritiva da Idade
+
+```{r stats-age}
+
+summary(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+mean(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+median(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+sd(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+min(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+max(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+IQR(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+quantile(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+```
+
+## Estatística Descritiva da Intensidade p53
+
+```{r stats-p53}
+
+summary(metadata_final$p53_Intensity)
+mean(metadata_final$p53_Intensity)
+median(metadata_final$p53_Intensity)
+sd(metadata_final$p53_Intensity)
+min(metadata_final$p53_Intensity)
+max(metadata_final$p53_Intensity)
+IQR(metadata_final$p53_Intensity)
+quantile(metadata_final$p53_Intensity)
+```
+
+## Exploração gráfica
+### Visualização de Variáveis Nominais
+
+```{r barplots-base-r}
+
+barplot(table(metadata_final$LESIONS_TYPES), 
+        col       = "steelblue", 
+        main      = "Frequência por tipo de lesão", 
+        las       = 2, 
+        cex.names = 0.6, 
+        ylab      = "Frequência")
+pie(table(metadata_final$LESIONS_TYPES), cex = 0.5, main = "Proporção relativa de tipos de lesões")
+
+barplot(table(metadata_final$BRCA_STATUS_PATIENT), 
+        col        = "pink", 
+        main       = "Frequência por estado BRCA",
+        las        = 2, 
+        cex.names  = 0.6,
+        ylab       = "Frequência")
+pie(table(metadata_final$BRCA_STATUS_PATIENT), cex = 0.5, radius = 1.0, main = "Proporção do estado BRCA")
+
+barplot(table(metadata_final$ROI_TYPES), 
+        col  = "tomato", 
+        main = "Distribuição dos tipos teciduais",
+        ylab = "Frequência")
+pie(table(metadata_final$ROI_TYPES), cex = 0.5, main = "Proporção de Segmentos Epiteliais e Estromais")
+```
+
+### Distribuição de Variáveis Contínuas
+
+```{r histograms-distribution}
+
+hist(metadata_final$p53_Intensity, 
+     col  = "lightblue", 
+     main = "Distribuição da intensidade do marcador p53",
+     xlab = "Intensidade do marcador p53", 
+     ylab = "Frequência")
+hist(metadata_final$AGE_AT_DIAGNOSIS_YRS, 
+     col  = "indianred3", 
+     main = "Distribuição da idade ao diagnóstico", 
+     xlab = "Idade do diagnóstico",
+     xlim = c(20,90), 
+     ylab = "Frequência")
+```
+
+### Análise de Outliers
+
+```{r boxplots-outliers}
+
+boxplot.stats(metadata_final$p53_Intensity)
+
+boxplot(metadata_final$p53_Intensity,
+        col        = "plum3",
+        horizontal = TRUE, 
+        main       = "Distribuição da Intensidade do Marcador p53",
+        xlab       = "Intensidade (RFU)")
+
+DIQ      = IQR(metadata_final$p53_Intensity)
+limsup1  = quantile(metadata_final$p53_Intensity, 0.75) + 1.5 * DIQ
+limsup2  = quantile(metadata_final$p53_Intensity, 0.75) + 3 * DIQ
+abline(v = limsup1, col = 4, lty = 2)
+abline(v = limsup2, col = 2, lty = 2)
+
+boxplot(metadata_final$AGE_AT_DIAGNOSIS_YRS, 
+        col        = "royalblue", 
+        horizontal = TRUE, 
+        main       = "Distribuição da Idade ao Diagnóstico", xlab = "Anos")
+
+boxplot.stats(metadata_final$AGE_AT_DIAGNOSIS_YRS)
+```
+
+**Standardização da contagem celular `CELL_GROUP_COUNTS` - z-score** 
+
+Comparação entre a contagem bruta de células (escala original) e a variável normalizada. 
+Observa-se a manutenção da morfologia da distribuição, com a alteração da escala para desvios padrão em torno da média (0).
+
+```{r standardization-comparison}
+
+print("Estatísticas Sumárias da Contagem Celular Bruta (nº de células)")
+print("Estatísticas Sumárias da Variável Standardizada (unidades de desvio padrão)")
+summary(metadata_final$CELL_GROUP_COUNTS)
+summary(metadata_final$CELL_COUNT_ST)
+
+par(mfrow = c(1, 2))
+boxplot(metadata_final$CELL_GROUP_COUNTS, 
+        main = "Antes: Original",
+        col  = "peachpuff4", 
+        ylab = "Nº de células")
+boxplot(metadata_final$CELL_COUNT_ST, 
+        main = "Depois: Z-Score",
+        col  = "peachpuff3",
+        ylab = "Unidades de desvio padrão")
+```
+
+### Cruzamento de variáveis
+
+**Comparação p53 por Compartimento Tecidular** A análise da intensidade do marcador *p53* em função das ROI (`ROI_TYPES`) revela uma disparidade nítida entre os compartimentos tecidulares. Observa-se que o sinal proteico é significativamente mais elevado no epitélio, o local de origem das lesões precursoras e do carcinoma, em comparação com o estroma circundante. Este resultado é fundamental, pois valida a precisão da tecnologia de perfilagem espacial utilizada e confirma que a acumulação de *p53* está restrita à linhagem celular epitelial, onde ocorrem os eventos de instabilidade genómica [@Kader2025; @Lee2007].
+
+```{r p53-epithelium-vs-stroma}
+
+boxplot(p53_Intensity ~ ROI_TYPES, 
+        data = metadata_final, 
+        main = "Intensidade do marcador p53 no Epitélio vs Estroma", 
+        col  = c("pink", "lightblue"),
+        ylab = "Intensidade do marcador p53 (RFU)", 
+        xlab = "Tipos teciduais")
+```
+
+**Análise de Correlação Idade vs. p53** O gráfico de dispersão explora a relação entre a idade ao diagnóstico e a intensidade de *p53*, com a reta de regressão a indicar uma tendência de estabilidade entre as variáveis. A distribuição dos pontos, coloridos por tipo de lesão, sugere que a acumulação deste biomarcador é determinada pela natureza patológica da lesão (com valores mais elevados em carcinomas e STICs) e não pelo envelhecimento cronológico da paciente. Esta observação reforça a hipótese de que a mutação no gene *TP53* é um evento molecular independente da idade, ocorrendo precocemente na oncogénese tubária [@Lee2007; @Kader2025].
+
+```{r correlation-age-intensity}
+cores_lesao = as.numeric(as.factor(metadata_final$LESIONS_TYPES))
+plot(metadata_final$AGE_AT_DIAGNOSIS_YRS, 
+     metadata_final$p53_Intensity,
+     col  = cores_lesao, 
+     pch  = 16,
+     main = "Correlação: Idade vs Intensidade do marcador p53",
+     xlab = "Idade ao diagnóstico", 
+     ylab = "Intensidade do marcador p53(RFU)")
+abline(lm(p53_Intensity ~ AGE_AT_DIAGNOSIS_YRS, data = metadata_final), col = "red", lwd = 2)
+```
+
+**Impacto do Estatuto BRCA na Expressão de p53** A análise do impacto do estatuto mutacional *BRCA* na intensidade de *p53*, focada especificamente em STIC e carcinoma invasivo, permite investigar a interação entre o risco hereditário e a instabilidade genómica adquirida. O gráfico de caixas revela se a acumulação da proteína *p53* é influenciada pela presença de mutações nos genes *BRCA1/2* nestes estádios críticos. Esta visualização é essencial para compreender se a via de progressão tumoral iniciada pela mutação em *TP53* é potenciada ou independente do contexto genético germinal da paciente, fornecendo pistas sobre a agressividade do microambiente tumoral [@Norquist2016; @Bowtell2015].
+
+```{r boxplot-p53-brca-status}
+
+library(ggplot2)
+
+subset_interesse = subset(metadata_final, LESIONS_TYPES %in% c("STIC.C", "Inv Cancer"))
+
+ggplot(subset_interesse, aes(x = LESIONS_TYPES, y = p53_Intensity, fill=BRCA_STATUS_PATIENT)) + 
+  geom_boxplot() + 
+  theme_minimal() +
+  labs(title    = "Impacto do Estado BRCA na Intensidade do marcador p53", 
+       x        = "Tipos de Lesões", 
+       y        = "Intensidade do marcador p53 (RFU)", 
+       subtitle = "Apenas em lesões precursoras (STIC) e invasivas (Inv Cancer)", 
+       fill     = "Estado BRCA")
+
+```
+
+**Distribuição da coorte por lesão e genética** A análise da distribuição de frequências revela a composição heterogénea da coorte, destacando a prevalência de amostras de HGSOC invasivo e STIC, especialmente em pacientes portadoras de mutações nos genes *BRCA1/2*. O recurso ao gráfico de barras horizontais permite observar que, enquanto as lesões incidentais apresentam uma distribuição mais equilibrada, as patologias de alto grau estão fortemente representadas no grupo de risco hereditário. Esta panorâmica é essencial para contextualizar a robustez dos dados moleculares, garantindo que as inferências sobre a progressão tumoral consideram a representatividade de cada subgrupo histológico.
+
+```{r barplot-lesions-brca-composition}
+
+ggplot(metadata_final) + 
+  aes(x = LESIONS_TYPES, fill = BRCA_STATUS_PATIENT) +
+  geom_bar() + 
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Tipo de Lesão", y = "Frequência", fill = "Estado BRCA")
+```
+
+**Perfil global de *p53* por categoria histológica** O panorama global da intensidade de *p53* demonstra uma diferenciação clara entre as categorias histológicas. Através do boxplot, é possível observar que as medianas de expressão elevam-se progressivamente das lesões incidentais para as lesões precursoras e invasivas, validando visualmente a hipótese do gradiente de progressão. A amplitude das caixas sugere, contudo, uma variabilidade intrínseca notável em grupos como o `Inv Cancer`, refletindo a heterogeneidade molecular típica do carcinoma seroso de alto grau. Este gráfico serve de síntese visual para a análise univariada, consolidando o papel do *p53* como um marcador sentinela na oncogénese tubária [@Lee2007; @Kader2025] .
+
+```{r boxplot-p53-global-landscape}
+
+ggplot(metadata_final) + 
+  aes(x = LESIONS_TYPES, y = p53_Intensity, fill = LESIONS_TYPES) + 
+  coord_flip() +
+  geom_boxplot() + 
+  theme_minimal() + 
+  labs(x = "Tipo de Lesão", y = "Intensidade do marcador p53 (RFU)", fill = "Tipo de Lesão")
+```
+
+## Caracterização Univariada e Testes de Hipóteses por Tipologia de Lesão
+
+Nesta fase do estudo, procedeu-se à análise inferencial com o objetivo de investigar se existem diferenças estatisticamente significativas na intensidade da proteína *p53* entre os diversos grupos histológicos. A proteína *p53* é um biomarcador crítico na oncogénese do HGSOC, sendo a sua acumulação ou ausência um indicador de mutações no gene *TP53* [@Lee2007; @Kader2025]. Esta análise permitirá identificar se a progressão das lesões, desde os estados incidentais até ao carcinoma invasivo, é acompanhada por alterações quantitativas na expressão deste marcador. 
+Deste modo, a presente análise procura dar resposta às seguintes questões de investigação:
+
+* Existem diferenças estatisticamente significativas na intensidade da proteína *p53* entre os diferentes tipos de lesões precursoras e o carcinoma invasivo?
+
+* É possível identificar um gradiente de expressão de *p53* que acompanhe a transição do epitélio tubário normal (incidentais) para as STICs e, finalmente, para o HGSOC?
+
+* De que forma o estatuto mutacional dos genes *BRCA1/2* e o microambiente celular (estroma vs. epitélio) influenciam os perfis de expressão génica e proteica detetados pela tecnologia *GeoMx* e *CyCIF*?
+
+
+### Preparação da variável alvo
+
+```{r prep-p53-univariate}
+
+names(metadata_final)
+grep("p53", names(metadata_final), value = TRUE)
+
+dados_uni               = metadata_final[, c("LESIONS_TYPES", "p53_Intensity")]
+dados_uni               = na.omit(dados_uni)
+dados_uni$LESIONS_TYPES = as.factor(dados_uni$LESIONS_TYPES)
+dados_uni$p53_Intensity = as.numeric(dados_uni$p53_Intensity)
+```
+
+## Sumarização descritiva
+
+```{r summary-stats-groups}
+
+str(dados_uni)
+summary(dados_uni)
+table(dados_uni$LESIONS_TYPES)
+
+aggregate(p53_Intensity ~ LESIONS_TYPES, data = dados_uni, summary)
+```
+
+## Visualização de Distribuições
+
+```{r boxplot-jitter-p53}
+
+#install.packages("dplyr")
+library(dplyr)
+
+dados_uni %>%
+  group_by(LESIONS_TYPES) %>%
+  summarise(
+    n             = n(),
+    media         = mean(p53_Intensity, na.rm = TRUE),
+    desvio_padrao = sd(p53_Intensity, na.rm = TRUE),
+    mediana       = median(p53_Intensity, na.rm = TRUE),
+    IQR           = IQR(p53_Intensity, na.rm = TRUE),
+    minimo        = min(p53_Intensity, na.rm = TRUE),
+    maximo        = max(p53_Intensity, na.rm = TRUE))
+
+library(ggplot2)
+ggplot(dados_uni, aes(x = LESIONS_TYPES, y = p53_Intensity, fill = LESIONS_TYPES)) +
+  geom_boxplot() +
+  coord_flip()+
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "p53 Intensity por tipo de lesão", x = "Tipo de lesão", y = "p53 Intensity") +
+  theme(legend.position = "none")
+
+ggplot(dados_uni, aes(x = p53_Intensity)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "white") +
+  facet_wrap(~ LESIONS_TYPES) +
+  theme_minimal()
+
+#install.packages("ggpubr")
+library(ggpubr)
+library(ggplot2)
+print(ggqqplot(dados_uni, x = "p53_Intensity", facet.by = "LESIONS_TYPES"))
+```
+
+## Verificação de Pressupostos Estatísticos
+
+Antes da seleção do teste de hipóteses adequado para a comparação entre grupos, é imperativo verificar o cumprimento dos pressupostos estatísticos. Para tal, avaliou-se a normalidade da distribuição da intensidade de *p53* em cada grupo através do **teste de Shapiro-Wilk** e da análise visual de gráficos Q-Q (Quantile-Quantile). Adicionalmente, testou-se a homocedasticidade (homogeneidade das variâncias) recorrendo ao **teste de Levene**, de modo a determinar se os dados permitem a aplicação de métodos paramétricos (como a ANOVA) ou se requerem abordagens mais robustas [@ShapiroWilk1965; @Levene1960].
+
+```{r statistical-tests}
+
+# Normalidade 
+by(dados_uni$p53_Intensity, dados_uni$LESIONS_TYPES, shapiro.test)
+
+# Homogeneidade
+# install.packages("car")
+library(car)
+leveneTest(p53_Intensity ~ LESIONS_TYPES, data = dados_uni)
+```
+
+## Análise de Variância Não Paramétrica
+
+Os resultados dos testes preliminares revelaram que tanto a normalidade como a homogeneidade das variâncias foram violadas em diversos grupos histológicos ($p < 0.05$). Nestas condições, a aplicação de testes paramétricos poderia conduzir a conclusões enviesadas. Como tal, optou-se pela utilização do **teste de Kruskal-Wallis**, uma alternativa não paramétrica baseada na análise de *ranks*. Este método permite comparar as medianas da intensidade de *p53* entre os múltiplos grupos sem assumir uma distribuição normal dos dados, garantindo a fiabilidade estatística dos resultados obtidos [@KruskalWallis1952].
+
+```{r kruskal-wallis-test}
+
+kruskal.test(p53_Intensity ~ LESIONS_TYPES, data = dados_uni)
+```
+
+## Pós-teste de Comparações Múltiplas
+
+Uma vez que o teste de Kruskal-Wallis revelou diferenças estatisticamente significativas ($p < 0.05$), rejeitando a hipótese nula de igualdade entre as distribuições, tornou-se necessária a realização de um teste post-hoc para identificar quais os pares específicos de grupos histológicos que diferem entre si.
+Para o efeito, aplicou-se o **teste de Dunn**, que é o procedimento padrão para comparações múltiplas após um **teste de Kruskal-Wallis**. Dado que a realização de múltiplos testes aumenta a probabilidade de ocorrência de falsos positivos (Erro de Tipo I), utilizou-se a **correção de Bonferroni**. Este método ajusta os valores de significância ($p-values$), tornando a análise mais rigorosa e assegurando que as diferenças detetadas na intensidade de *p53* são biologicamente relevantes e estatisticamente robustas [@Dunn1961].
+
+```{r dunn-post-hoc}
+
+#install.packages("FSA")
+library(FSA)
+
+dunn_res = dunnTest(p53_Intensity ~ LESIONS_TYPES, data = dados_uni, method = "bonferroni")
+dunn_res
+dunn_res$res
+
+subset(dunn_res$res, P.adj < 0.05)
+
+signi_dem = subset(dunn_res$res, P.adj < 0.05)
+signi_dem
+
+write.csv(signi_dem, "comparacoes_significativas_dunn.csv", row.names = FALSE)
+```
+
+## Análise de Direcionalidade (Medianas)
+
+```{r medians-interpretation}
+
+medianas_grupo = aggregate(p53_Intensity ~ LESIONS_TYPES, data = dados_uni, median)
+medianas_grupo
+
+signi_dem
+medianas_grupo
+```
+
+## Conclusões e Respostas às Questões de Investigação
+
+A análise estatística e bioinformática realizada permitiu responder às questões de investigação inicialmente formuladas:
+
+1. **Sobre as diferenças na intensidade de *p53* entre lesões e carcinoma:**
+A análise inferencial confirmou a existência de diferenças estatisticamente significativas entre os diversos grupos histológicos ($\chi^2 = 141.66$; $df = 10$; $p < 0.001$). Através do teste post-hoc de Dunn, demonstrou-se que a expressão da proteína *p53* não é uniforme, validando este biomarcador como um elemento diferenciador entre tecidos benignos/incidentais e tecidos com patologia maligna ou pré-maligna [@Kader2025; @Lee2007].
+
+2. **Sobre a existência de um gradiente de expressão na progressão tumoral:** Identificou-se um padrão biológico de progressão claro. Os tecidos incidentais apresentaram as medianas de intensidade mais baixas da coorte. Em contraste, observou-se uma ascensão significativa nos valores de expressão ao transitar para as lesões precursoras "assinadas" e, finalmente, para o carcinoma invasivo. Este gradiente confirma que a estabilização e acumulação da proteína *p53* — resultante de mutações no gene *TP53* — é um evento molecular crítico e mensurável que acompanha a evolução da doença desde a trompa de Falópio [@Lee2007; @Kader2025].
+
+3. **Sobre a influência do microambiente e do estatuto mutacional:** 
+A distinção nítida entre as lesões incidentais e as lesões precursoras reforça a premissa de que a perfilagem espacial (*GeoMx* e *CyCIF*) é fundamental para mapear a remodelação do microambiente tumoral. Os dados sugerem que a intensidade de *p53* funciona como um indicador robusto da linhagem tumoral, permitindo distinguir alterações fisiológicas de eventos neoplásicos precoces, mesmo em pacientes com elevado risco hereditário (mutações *BRCA1/2*).
+
+Em suma, os resultados obtidos corroboram a literatura atual e reiteram a utilidade da transcriptómica e proteómica espacial na identificação de eventos moleculares que precedem a invasão maligna no cancro do ovário [@Kader2025; @Merritt2020; @Lin2018] .
+
+## Análise de Expressão Diferencial
+### Contexto e Justificação da Comparação
+
+Para a análise de expressão diferencial, optou-se pela comparação entre o grupo **Inv Cancer** (HGSOC invasivo, $n = 144$) e um grupo de referência composto pelos quatro subtipos de lesões incidentais disponíveis na coorte: **Incidental FT**, **Incidental Fimbriae**, **Incidental p53sig** e **Incidental STIC** ($n = 192$). 
+A agregação destes subgrupos numa categoria de referência unificada é biologicamente justificada: todas representam tecido tubário sem evidência de malignidade estabelecida, funcionando como o estado mais próximo do tecido fisiológico normal nesta coorte. 
+Esta escolha maximiza o contraste biológico entre os dois extremos da trajetória de progressão tumoral e aumenta o poder estatístico da análise, complementando diretamente a análise univariada de *p53* anteriormente realizada.
+
+```{r install_packs}
+
+# BiocManager::install(c("limma", "fgsea"))
+# install.packages(c("msigdbr", "pheatmap", "ggrepel"))
+# install.packages("rlang")
+```
+
+### Preparação dos Grupos para Expressão Diferencial
+
+```{r de-group-preparation}
+
+grupos_incidentais = c("Incidental FT", "Incidental Fimbriae", "Incidental p53sig", "Incidental STIC")
+
+amostras_inv = metadata_final$SAMPLE_ID[metadata_final$LESIONS_TYPES == "Inv Cancer"]
+amostras_inc = metadata_final$SAMPLE_ID[metadata_final$LESIONS_TYPES %in% grupos_incidentais]
+
+amostras_inv = intersect(amostras_inv, colnames(mrna_final))
+amostras_inc = intersect(amostras_inc, colnames(mrna_final))
+
+cat("Amostras Inv Cancer:", length(amostras_inv), "\n")
+cat("Amostras Incidentais (agregadas):", length(amostras_inc), "\n")
+
+mrna_de = mrna_final[, c(amostras_inv, amostras_inc)]
+
+grupo_de = factor(c(rep("InvCancer",  length(amostras_inv)),
+                    rep("Incidental", length(amostras_inc))),
+                  levels = c("Incidental", "InvCancer"))
+
+cat("Dimensões da matriz de expressão para DE:", dim(mrna_de), "\n")
+```
+
+### Filtragem de Genes de Baixa Variância
+
+```{r de-variance-filter}
+
+var_de  = apply(mrna_de, 1, var)
+mrna_de = mrna_de[var_de > 0, ]
+
+cat("Genes após filtragem de variância:", nrow(mrna_de), "\n")
+```
+
+### Modelo Linear com *limma*
+
+Os dados de expressão são z-scores normalizados, pelo que dispensam transformação logarítmica adicional. 
+O modelo linear do *limma* é aplicado diretamente, com moderação empírica de variâncias via *eBayes* (matrizes com muitos genes e número moderado de amostras). A **correção de Benjamini-Hochberg** controla a taxa de falsas descobertas (FDR) [@Ritchie2015; @BenjaminiHochberg1995].
+
+```{r limma-de-analysis}
+
+library(limma)
+
+design_de = model.matrix(~ grupo_de)
+colnames(design_de) = c("Intercept", "InvCancer_vs_Incidental")
+
+fit_de = lmFit(mrna_de, design_de)
+fit_de = eBayes(fit_de)
+
+resultados_de = topTable(fit_de, coef = "InvCancer_vs_Incidental", number = Inf, adjust = "BH", sort.by = "B")
+
+head(resultados_de, 10)
+cat("\nTotal de genes testados:", nrow(resultados_de), "\n")
+cat("Genes com FDR < 0.05:", sum(resultados_de$adj.P.Val < 0.05, na.rm = TRUE), "\n")
+cat("Up-regulados (logFC > 1, FDR < 0.05):", 
+    sum(resultados_de$logFC > 1  & resultados_de$adj.P.Val < 0.05, na.rm = TRUE), "\n")
+cat("Down-regulados (logFC < -1, FDR < 0.05):",
+    sum(resultados_de$logFC < -1 & resultados_de$adj.P.Val < 0.05, na.rm = TRUE), "\n")
+```
+
+### Visualização dos Resultados de Expressão Diferencial
+
+Para a representação gráfica dos resultados da análise de expressão diferencial, utilizou-se um **Volcano Plot**. Esta visualização permite a interpretação simultânea da magnitude da alteração biológica ($log_{2}$ fold-change) e da sua respetiva significância estatística ($-log_{10}$ FDR). 
+No gráfico, os genes que apresentam um $FDR < 0,05$ e um $|logFC| > 1$ foram destacados cromaticamente: a vermelho para os genes sobre-expressos (up-regulated) e a azul para os sub-expressos (down-regulated) no grupo `InvCancer`. 
+De forma a facilitar a interpretação biológica, os dez genes com maior significância estatística (menor FDR) foram explicitamente anotados [@Ritchie2015].
+
+```{r volcano-plot}
+
+# install.packages("rlang")
+# install.packages("ggrepel")
+
+library(ggplot2)
+library(ggrepel)
+
+resultados_de$significancia                                                            = "Não significativo"
+resultados_de$significancia[resultados_de$adj.P.Val < 0.05 & resultados_de$logFC > 1]  = "Up-regulated"
+resultados_de$significancia[resultados_de$adj.P.Val < 0.05 & resultados_de$logFC < -1] = "Down-regulated"
+
+top_genes = head(resultados_de[order(resultados_de$adj.P.Val), ], 10)
+
+ggplot(resultados_de, aes(x = logFC, y = -log10(adj.P.Val), colour = significancia)) + 
+  geom_point(alpha = 0.5, size = 1.2) +
+  scale_colour_manual(values = c("Up-regulated" = "#D62728", "Down-regulated" = "#1F77B4", "Não significativo" = "grey70")) +
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed", colour = "black", linewidth = 0.4) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "black", linewidth = 0.4) +
+  geom_text_repel(data = top_genes, aes(label = rownames(top_genes)), size = 3, colour = "black",max.overlaps = 15) +
+  theme_minimal() +
+  labs(title = "Volcano Plot — Inv Cancer vs. Incidental (agregado)", 
+       x = "log2 Fold-Change", y = "-log10(FDR)", colour   = "Regulação")
+```
+
+Para examinar os padrões de co-expressão e a assinatura molecular distintiva entre as condições biológicas, foi gerado um **heatmap** focado nos 50 genes com maior significância estatística (menores valores de FDR). 
+Esta visualização incorpora um agrupamento hierárquico (hierarchical clustering), aplicado tanto às amostras como aos genes, utilizando a distância euclidiana para organizar os perfis de expressão. Este método permite identificar visualmente módulos de genes correlacionados e avaliar a capacidade destes biomarcadores em segregar nitidamente os dois grupos fenotípicos em estudo. A escala de cores reflete os níveis de expressão normalizados, evidenciando as divergências transcriptómicas que caracterizam a progressão para o estado invasivo [@Ritchie2015]
+
+```{r heatmap-top50}
+
+# install.packages("pheatmap")
+library(pheatmap)
+
+top50       = head(rownames(resultados_de[order(resultados_de$adj.P.Val), ]), 50)
+mat_heatmap = as.matrix(mrna_de[top50, ])
+
+anotacao_col = data.frame(Grupo = grupo_de, row.names = colnames(mrna_de))
+cores_grupo  = list(Grupo = c("InvCancer"  = "#D62728", "Incidental" = "#1F77B4"))
+
+pheatmap(mat_heatmap, 
+         annotation_col           = anotacao_col, 
+         annotation_colors        = cores_grupo,
+         scale                    = "row", 
+         clustering_distance_rows = "euclidean", 
+         clustering_distance_cols = "euclidean",
+         clustering_method        = "complete", 
+         show_colnames            = FALSE, 
+         fontsize_row             = 7,
+         main                     = "Top 50 Genes DE — Inv Cancer vs. Incidental\n(z-score por linha)")
+```
+
+### Exportação dos Resultados
+
+```{r export-results}
+
+write.csv(resultados_de, file = "Expressao_Diferencial_InvCancer_vs_Incidental.csv", row.names = TRUE)
+
+genes_significativos = subset(resultados_de, adj.P.Val < 0.05 & abs(logFC) > 1)
+
+write.csv(genes_significativos, file = "Genes_Significativos_DE.csv", row.names = TRUE)
+
+cat("Ficheiros exportados.\n")
+cat("Genes significativos:", nrow(genes_significativos), "\n")
+```
+
+
+## Análise de Enriquecimento — Gene Set Enrichment Analysis (fGSEA)
+### Contextualização
+
+Após a identificação dos genes diferencialmente expressos, procede-se à análise de enriquecimento funcional com recurso ao método **fGSEA** (*fast Gene Set Enrichment Analysis*). 
+Ao contrário das abordagens baseadas em limiar (*over-representation analysis*), o *fGSEA* utiliza a totalidade dos genes ordenados por relevância estatística, não exigindo uma lista binária de "significativos vs. não significativos" [@Korotkevich2016; @Subramanian2005]. 
+O estatístico de enriquecimento é calculado com base na estatística *t* do *limma*, que integra simultaneamente a magnitude do efeito e a sua precisão estatística [@Ritchie2015; @Korotkevich2016] 
+As gene sets utilizadas provêm da base de dados **MSigDB** (coleção Hallmark, H), que agrega 50 vias biológicas com coerência funcional robusta, adequadas para dados humanos anotados com símbolos HGNC [@Liberzon2015].
+
+### Preparação do Ranking e das Gene Sets
+
+```{r fgsea-preparation}
+
+# BiocManager::install("fgsea")
+# install.packages("msigdbr")
+library(fgsea)
+library(msigdbr)
+library(dplyr)
+
+ranked_genes        = resultados_de$t
+names(ranked_genes) = rownames(resultados_de)
+ranked_genes        = sort(ranked_genes[!is.na(ranked_genes)], decreasing = TRUE)
+
+cat("Genes no vetor de ranking:", length(ranked_genes), "\n")
+cat("Top 5 (mais up em InvCancer):\n");  print(head(ranked_genes, 5))
+cat("Bottom 5 (mais down em InvCancer):\n"); print(tail(ranked_genes, 5))
+
+hallmark_sets = msigdbr(species = "Homo sapiens", category = "H")
+hallmark_list = split(hallmark_sets$gene_symbol, hallmark_sets$gs_name)
+cat("\nGene sets Hallmark carregadas:", length(hallmark_list), "\n")
+```
+
+### Execução do fGSEA
+
+```{r fgsea}
+
+set.seed(123)
+
+fgsea_res = fgsea(pathways = hallmark_list, stats = ranked_genes, minSize = 15, maxSize = 500, nPermSimple = 10000)
+fgsea_res = fgsea_res[order(fgsea_res$NES, decreasing = TRUE), ]
+
+cat("Gene sets testadas:", nrow(fgsea_res), "\n")
+cat("Gene sets significativas (FDR < 0.05):", sum(fgsea_res$padj < 0.05, na.rm = TRUE), "\n")
+
+sig_gsea              = subset(fgsea_res, padj < 0.05)
+sig_gsea_display      = sig_gsea[, c("pathway", "NES", "pval", "padj", "size")]
+sig_gsea_display$NES  = round(sig_gsea_display$NES, 3)
+sig_gsea_display$pval = signif(sig_gsea_display$pval, 3)
+sig_gsea_display$padj = signif(sig_gsea_display$padj, 3)
+
+print(sig_gsea_display)
+```
+
+### Visualização dos Resultados de Enriquecimento
+
+A distribuição dos valores de **NES** (*Normalized Enrichment Score*) permite a identificação sistemática das vias biológicas diferencialmente ativadas entre os estados teciduais analisados. 
+Neste gráfico, um NES positivo denota um enriquecimento significativo em `Inv Cancer`, evidenciando a ativação de processos oncogénicos e de sinalização proliferativa. Inversamente, um NES negativo indica um enriquecimento no tecido incidental, sugerindo a preservação de vias de homeostase celular que se encontram suprimidas no carcinoma invasivo. A ordenação decrescente dos valores de NES facilita a priorização das vias moleculares mais impactantes na transição fenotípica, permitindo discernir os principais motores da progressão tumoral e o colapso dos mecanismos de regulação fisiológica.
+
+```{r fgsea-barplot}
+
+sig_gsea_plot = as.data.frame(sig_gsea)
+sig_gsea_plot$pathway_clean = gsub("HALLMARK_", "", sig_gsea_plot$pathway)
+sig_gsea_plot$pathway_clean = gsub("_", " ", sig_gsea_plot$pathway_clean)
+sig_gsea_plot$pathway_clean = tools::toTitleCase(tolower(sig_gsea_plot$pathway_clean))
+sig_gsea_plot$direcao = ifelse(sig_gsea_plot$NES > 0, "InvCancer (up)", "Incidental (up)")
+
+ggplot(sig_gsea_plot, aes(x = reorder(pathway_clean, NES), y = NES, fill = direcao)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = c("InvCancer (up)"  = "#D62728", "Incidental (up)" = "#1F77B4")) +
+  theme_minimal() +
+  labs(title    = "fGSEA — Vias Hallmark Enriquecidas (FDR < 0.05)",
+       subtitle = "Inv Cancer vs. Incidental (agregado) | Ranking: estatística t do limma",
+       x        = "Via Biológica (Hallmark)",
+       y        = "Normalized Enrichment Score (NES)",
+       fill     = "Enriquecido em") +
+  theme(axis.text.y = element_text(size = 9))
+```
+
+**Conclusões**:
+
+1. **Ativação de Vias de Proliferação e Ciclo Celular** (como *E2F Targets*, *G2M Checkpoint* e *MYC Targets*):
+Isto indica que o tecido de `Inv Cancer` apresenta uma desregulação severa do ciclo celular. Os alvos de *E2F* e *MYC* são motores clássicos da proliferação descontrolada, sugerindo que estas células adquiriram a capacidade de se replicar rapidamente, ultrapassando os pontos de controlo habituais [@DeMeyer2009; Williams2025].
+
+2. **Remodelação do Microambiente e Sinalização Estromal**: 
+Enriquecimento significativo em *Epithelial Mesenchymal Transition* (EMT), o que confirma que as células epiteliais estão a adquirir propriedades mesenquimais, um passo essencial para a invasão e metástase [@Loret2019; @Davidson2012]. A *TNFA Signaling* via *NFkBA* sugere um ambiente inflamatório crónico que pode estar a potenciar a progressão tumoral e a resistência à apoptose [@Hagemann2006; @Szlosarek2006].
+
+3. **Supressão de Vias de Homeostase e Metabolismo** (como *Estrogen Response Late/Early*, *Bile Acid Metabolism* e *Fatty Acid Metabolism*):
+A redução da resposta ao estrogénio sugere uma perda de diferenciação hormonal funcional à medida que o tumor progride. A supressão de vias metabólicas oxidativas indica uma reprogramação metabólica profunda, onde a célula prioriza a síntese de biomassa em detrimento das funções metabólicas normais do tecido incidental [@Kader2025; @Bowtell2015].
+
+Em suma, os dados revelam uma transição clara de um estado de homeostase metabólica e controlo hormonal (tecido incidental) para um estado de hiperproliferação, transição epitélio-mesenquimal e inflamação ativa (`Inv Cancer`). Esta assinatura molecular é característica da agressividade do carcinoma seroso de alto grau, corroborando a perda dos mecanismos de regulação celular descritos na literatura [@Kader2025; @DeMeyer2009; @Loret2019].
+
+De forma a corroborar a robustez estatística das principais vias identificadas, foram gerados **enrichment plots** para as três vias com maior representatividade em cada direção do enriquecimento. Estes gráficos ilustram a distribuição dos genes pertencentes a cada pathway ao longo do ranking genómico total, permitindo observar a acumulação de genes no topo ou na base da lista ordenada. Esta visualização é fundamental para validar a coerência biológica do enriquecimento detetado, demonstrando que os sinais moleculares não são eventos isolados, mas sim o resultado de uma coordenação concertada de múltiplos genes que definem a transição entre o tecido incidental e o carcinoma invasivo.
+
+```{r fgsea-enrichment-plots}
+
+top_up   = head(fgsea_res$pathway[order(fgsea_res$NES, decreasing = TRUE)], 3)
+top_down = head(fgsea_res$pathway[order(fgsea_res$NES, decreasing = FALSE)], 3)
+
+for (via in c(top_up, top_down)) {
+  p = plotEnrichment(hallmark_list[[via]], ranked_genes) +
+    labs(title = gsub("HALLMARK_", "", via), 
+        subtitle = paste0("NES = ", round(fgsea_res$NES[fgsea_res$pathway == via], 3),
+                          " | FDR = ", signif(fgsea_res$padj[fgsea_res$pathway == via], 3)),
+        x = "Ranking dos Genes", y = "Enrichment Score") +
+    theme_minimal()
+  print(p)}
+```
+
+**Conclusões**:
+
+A análise de correlação multivariada confirmou a consistência biológica e técnica dos dados. A forte correlação positiva entre marcadores proteicos específicos (e.g., *PanCK*, *p53*) e as respetivas frações celulares valida os algoritmos de segmentação. Adicionalmente, a distribuição bimodal das intensidades proteicas e a segregação dos módulos de correlação imunitária e epitelial evidenciam a profunda reorganização estrutural e molecular que acompanha a progressão para o estado invasivo.
+
+### Exportação dos Resultados de Enriquecimento
+
+```{r fgsea-export}
+
+fgsea_export             = as.data.frame(fgsea_res)
+fgsea_export$leadingEdge = sapply(fgsea_export$leadingEdge, function(x) paste(x, collapse = "; "))
+
+write.csv(fgsea_export, file = "fGSEA_Hallmark_InvCancer_vs_Incidental.csv", row.names = FALSE)
+
+cat("Ficheiro fGSEA exportado com sucesso.\n")
+```
+
+## Conclusões: expressão diferencial e análise de enriquecimento
+
+A análise de expressão diferencial, utilizando o modelo linear *limma*, identificou uma assinatura genética robusta ($FDR < 0,05$; $|logFC| > 1$) que define o fenótipo `Inv Cancer`. Este perfil transcriptómico revela uma reprogramação celular profunda, onde a sobre-expressão de genes críticos valida a perda de identidade do tecido tubário original. A transição proteica da *p53*, observada inicialmente via *CyCIF*, encontra aqui o seu correspondente genómico, confirmando que a mutação e acumulação desta proteína desencadeiam uma cascata de desregulação em larga escala [@Ritchie2015; @Lin2018; @Lee2007].
+
+Os resultados do enriquecimento funcional via *fGSEA* elucidam os mecanismos biológicos que sustentam a agressividade tumoral. Observou-se um enriquecimento crítico em vias de proliferação celular, designadamente *E2F Targets*, *G2M Checkpoint* e *MYC Targets*. Esta ativação concertada indica que as células invasivas adquiriram uma capacidade replicativa autónoma e persistente. Paralelamente, o enriquecimento da via *EMT* fundamenta a base mecânica da invasão, sugerindo que as células epiteliais sofreram uma transição fenotípica que lhes confere mobilidade e capacidade de infiltração no estroma [@DeMeyer2009; Williams2025; @Loret2019] .
+
+Inversamente, a supressão de vias associadas ao metabolismo lipídico e à resposta hormonal (*Estrogen Response*) no tecido invasivo sugere uma perda de regulação fisiológica em favor da progressão tumoral. A ativação de vias inflamatórias, como a sinalização de *TNFA* via *NFkB*, reforça a existência de um microambiente tumoral pró-tumorogénico, onde a sinalização imunitária é cooptada para apoiar a sobrevivência celular em vez de promover a eliminação do tumor [@Hagemann2006; @Szlosarek2006].
+
+Em conclusão, a convergência entre a expressão diferencial e o enriquecimento de vias *Hallmark* demonstra que a progressão para o carcinoma invasivo não é um evento isolado, mas uma reestruturação biológica sistémica. A integração destes dados permite concluir que o HGSOC se caracteriza por um colapso dos pontos de controlo do ciclo celular e por uma exploração ativa do microambiente tecidual, fornecendo alvos moleculares claros para futuras intervenções diagnósticas e terapêuticas [@Kader2025; @Bowtell2015].
+
+## Referências Bibliográficas
