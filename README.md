@@ -56,7 +56,7 @@ Todos os ficheiros relativos à primeira etapa do trabalho encontram-se no diret
 * **comparacoes_significativas_dunn.csv**: Resultados do teste post-hoc de Dunn para comparações múltiplas.
 
 ## Estrutura do Repositório (Fase 2)
-Todos os ficheiros relativos à segunda etapa do trabalho encontram-se no diretório `fase2/`. Nos ficheiros .Rmd, algumas linhas de código foram colocadas em comentário para melhorar a legibilidade do documento e focar a apresentação nos resultados mais relevantes
+Todos os ficheiros relativos à segunda etapa do trabalho encontram-se no diretório `fase2/`. Nos ficheiros .Rmd, algumas linhas de código foram colocadas em comentário para melhorar a legibilidade do documento e focar a apresentação nos resultados mais relevantes.
 
 ### Notas sobre esta entrega
 Esta fase inclui também uma versão atualizada do relatório da Fase 1, com as seguintes melhorias:
