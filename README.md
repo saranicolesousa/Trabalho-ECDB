@@ -63,7 +63,7 @@ Esta fase inclui também uma versão atualizada do relatório da Fase 1, com as 
 * **Referenciação bibliográfica:** O documento foi revisto e complementado com citações e bibliografia no formato APA, garantindo o rigor científico das fontes utilizadas.
 
 ### Código e Relatórios
-* **fase1_trabalho_G8_v2.Rmd**: Versão atualizada do relatório da Fase 1, com referenciação bibliográfica e código otimizado para leitura.
+* **fase1_trabalho_G8_v2.Rmd**: Versão atualizada do relatório da Fase 1.
 * **fase1_trabalho_G8_v2.html**: Versão compilada do relatório atualizado da Fase 1.
 * **fase2_trabalho_G8.Rmd**: Script em RMarkdown contendo o pipeline de análise não supervisionada.
 * **fase2_trabalho_G8.html**: Versão compilada do trabalho da Fase 2 para leitura em browser.
