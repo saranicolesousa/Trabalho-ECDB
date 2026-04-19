@@ -39,7 +39,7 @@ O trabalho está estruturado em três fases principais de desenvolvimento:
 * **Seleção de Atributos:** Identificação da importância de genes ou proteínas específicas para o diagnóstico/prognóstico.
 ---
 ## Estrutura do Repositório (Fase 1)
-Todos os ficheiros relativos à primeira etapa do projeto encontram-se no diretório `fase1/`.
+Todos os ficheiros relativos à primeira etapa do trabalho encontram-se no diretório `fase1/`.
 
 ### Código e Relatórios
 * **fase1_trabalho_G8.Rmd**: Script em RMarkdown contendo todo o pipeline de análise.
@@ -56,12 +56,11 @@ Todos os ficheiros relativos à primeira etapa do projeto encontram-se no diret�
 * **comparacoes_significativas_dunn.csv**: Resultados do teste post-hoc de Dunn para comparações múltiplas.
 
 ## Estrutura do Repositório (Fase 2)
-Todos os ficheiros relativos à segunda etapa do projeto encontram-se no diretório `fase2/`.
+Todos os ficheiros relativos à segunda etapa do trabalho encontram-se no diretório `fase2/`. Nos ficheiros .Rmd, algumas linhas de código foram colocadas em comentário para melhorar a legibilidade do documento e focar a apresentação nos resultados mais relevantes
 
 ### Notas sobre esta entrega
 Esta fase inclui também uma versão atualizada do relatório da Fase 1, com as seguintes melhorias:
 * **Referenciação bibliográfica:** O documento foi revisto e complementado com citações e bibliografia no formato APA, garantindo o rigor científico das fontes utilizadas.
-* **Otimização do código:** Algumas linhas de código foram colocadas em comentário para melhorar a legibilidade do documento e focar a apresentação nos resultados mais relevantes.
 
 ### Código e Relatórios
 * **fase1_trabalho_G8_v2.Rmd**: Versão atualizada do relatório da Fase 1, com referenciação bibliográfica e código otimizado para leitura.
