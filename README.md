@@ -17,6 +17,9 @@ O projeto foca-se no desenvolvimento de um fluxo de trabalho (*workflow*) em **R
     * **Metadados Clínicos:** Inclui informações detalhadas sobre as amostras e a localização espacial.
 * **Dimensão:** 567 amostras
 
+Os ficheiros de dados não estão incluídos neste repositório devido ao seu tamanho.
+Para correr o pipeline, descarregue os dados do estudo **Ovarian Cancer (Gray, 2024)** em [cBioPortal](https://www.cbioportal.org/study/summary?id=ovary_geomx_gray_foundation_2024) e coloque os ficheiros na pasta `database_ovario/` na raiz do repositório.
+
 ---
 
 ## Metodologia e Fases do Trabalho
