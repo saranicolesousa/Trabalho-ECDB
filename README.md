@@ -54,6 +54,35 @@ Todos os ficheiros relativos à primeira etapa do projeto encontram-se no diret�
 * **Genes_Significativos_DE.csv**: Lista filtrada de genes com significância estatística.
 * **fGSEA_Hallmark_...csv**: Resultados da análise de enriquecimento de conjuntos de genes (Gene Set Enrichment Analysis).
 * **comparacoes_significativas_dunn.csv**: Resultados do teste post-hoc de Dunn para comparações múltiplas.
+
+## Estrutura do Repositório (Fase 2)
+Todos os ficheiros relativos à segunda etapa do projeto encontram-se no diretório `fase2/`.
+
+### Notas sobre esta entrega
+Esta fase inclui também uma versão atualizada do relatório da Fase 1, com as seguintes melhorias:
+* **Referenciação bibliográfica:** O documento foi revisto e complementado com citações e bibliografia no formato APA, garantindo o rigor científico das fontes utilizadas.
+* **Otimização do código:** Algumas linhas de código foram colocadas em comentário para melhorar a legibilidade do documento e focar a apresentação nos resultados mais relevantes.
+
+### Código e Relatórios
+* **fase1_trabalho_G8_v2.Rmd**: Versão atualizada do relatório da Fase 1, com referenciação bibliográfica e código otimizado para leitura.
+* **fase1_trabalho_G8_v2.html**: Versão compilada do relatório atualizado da Fase 1.
+* **fase2_trabalho_G8.Rmd**: Script em RMarkdown contendo o pipeline de análise não supervisionada.
+* **fase2_trabalho_G8.html**: Versão compilada do trabalho da Fase 2 para leitura em browser.
+
+### Ficheiros de Bibliografia (`/references`)
+* **referencias_fase1.bib**: Ficheiro BibTeX com todas as referências bibliográficas utilizadas na Fase 1.
+* **referencias_fase2.bib**: Ficheiro BibTeX com todas as referências bibliográficas utilizadas na Fase 2.
+* **apa.csl**: Ficheiro de estilo de citação no formato APA.
+
+### Resultados da Análise (`/results`)
+* **PCA_Scores_Fase2.csv**: Coordenadas das amostras no espaço PCA.
+* **PCA_Proteica_Scores_Fase2.csv**: Coordenadas das amostras no espaço PCA para dados proteómicos.
+* **PCA_Loadings_Fase2.csv**: Contribuição de cada gene para as componentes principais, permitindo a interpretação biológica dos eixos de variação.
+* **UMAP_Coordenadas_Fase2.csv**: Coordenadas das amostras resultantes da redução de dimensionalidade por UMAP.
+* **MDS_Coordenadas_Fase2.csv**: Coordenadas das amostras resultantes do Escalonamento Multidimensional Clássico (MDS/PCoA).
+* **tSNE_Coordenadas_Fase2.csv**: Coordenadas das amostras resultantes da redução de dimensionalidade por t-SNE.
+* **Kmeans_Clusters_Fase2.csv**: Atribuição de cada amostra ao respetivo cluster K-means (k=3), com identificadores de amostra e variáveis clínicas associadas.
+* **Kmeans_Contingencia_Fase2.csv**: Tabela de contingência cruzando os clusters K-means com o tipo de lesão (`LESIONSTYPES`), para interpretação biológica dos agrupamentos.
 ---
 
 ## Autores (Grupo 8)
