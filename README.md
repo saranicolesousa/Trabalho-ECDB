@@ -96,9 +96,14 @@ Todos os ficheiros relativos à terceira etapa do trabalho encontram-se no diret
 
 ### Ficheiros de Bibliografia (`/references`)
 
-- `referencias_fase3.bib`: Ficheiro BibTeX com todas as referências 
-  bibliográficas utilizadas na Fase 3.
+- `referencias_fase3.bib`: Ficheiro BibTeX com todas as referências bibliográficas utilizadas na Fase 3.
 * **apa.csl**: Ficheiro de estilo de citação no formato APA.
+
+### Resultados da Análise (`/results`)
+
+- `Metricas_Modelos_Fase3.csv`: Tabela comparativa de Accuracy, Sensitivity, Specificity e Kappa dos três modelos no conjunto de teste.
+- `Predicoes_Teste_Fase3.csv`: Predições de cada modelo versus valores reais no conjunto de teste (30% das amostras).
+- `Genes_Importantes_RF_Fase3.csv`: Lista de genes ordenados por importância segundo o modelo Random Forest, para interpretação biológica dos resultados.
 ---
 
 ## Autores (Grupo 8)
