@@ -53,9 +53,9 @@ Todos os ficheiros relativos à primeira etapa do trabalho encontram-se no diret
 - `Expressao_mRNA_Alinhada.csv`: Matriz de expressão génica normalizada e alinhada com as amostras clínicas.
 
 ### Resultados da Análise (`/results`)
-- `Expressao_Diferencial_...csv`: Resultados completos do teste de expressão diferencial.
+- `Expressao_Diferencial_InvCancer_vs_Incidental.csv`: Resultados completos do teste de expressão diferencial.
 - `Genes_Significativos_DE.csv`: Lista filtrada de genes com significância estatística.
-- `fGSEA_Hallmark_...csv`: Resultados da análise de enriquecimento de conjuntos de genes (Gene Set Enrichment Analysis).
+- `fGSEA_Hallmark_InvCancer_vs_Incidental.csv`: Resultados da análise de enriquecimento de conjuntos de genes (Gene Set Enrichment Analysis).
 - `comparacoes_significativas_dunn.csv`: Resultados do teste post-hoc de Dunn para comparações múltiplas.
 
 ## Estrutura do Repositório (Fase 2)
