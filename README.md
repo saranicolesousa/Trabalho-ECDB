@@ -85,6 +85,20 @@ Esta fase inclui também uma versão atualizada do relatório da Fase 1, com as 
 * **tSNE_Coordenadas_Fase2.csv**: Coordenadas das amostras resultantes da redução de dimensionalidade por t-SNE.
 * **Kmeans_Clusters_Fase2.csv**: Atribuição de cada amostra ao respetivo cluster K-means (k=3), com identificadores de amostra e variáveis clínicas associadas.
 * **Kmeans_Contingencia_Fase2.csv**: Tabela de contingência cruzando os clusters K-means com o tipo de lesão (`LESIONSTYPES`), para interpretação biológica dos agrupamentos.
+
+## Estrutura do Repositório (Fase 3)
+Todos os ficheiros relativos à terceira etapa do trabalho encontram-se no diretório `fase3/`.
+
+### Código e Relatórios
+
+- `fase3_trabalho_G8.Rmd`: Script em RMarkdown com o pipeline completo de análise preditiva.
+- `fase3_trabalho_G8.html`: Versão compilada do relatório da Fase 3 para leitura em browser.
+
+### Ficheiros de Bibliografia (`/references`)
+
+- `referencias_fase3.bib`: Ficheiro BibTeX com todas as referências 
+  bibliográficas utilizadas na Fase 3.
+* **apa.csl**: Ficheiro de estilo de citação no formato APA.
 ---
 
 ## Autores (Grupo 8)
