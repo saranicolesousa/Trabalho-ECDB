@@ -1,0 +1,15 @@
+,precision,recall,f1-score,support
+Chloroform,1.0,1.0,1.0,25.0
+Cyclohexane,1.0,1.0,1.0,29.0
+Dichloromethane,1.0,1.0,1.0,22.0
+Diethyl Malonate,1.0,1.0,1.0,20.0
+Diethylamine,1.0,1.0,1.0,21.0
+Diethylene Glycol,1.0,1.0,1.0,21.0
+Dimethyl Sulfoxide,1.0,1.0,1.0,21.0
+Ethanol,1.0,1.0,1.0,22.0
+Ethyl Acetate,1.0,1.0,1.0,22.0
+Ethylene Glycol,1.0,1.0,1.0,20.0
+Formic acid,1.0,1.0,1.0,22.0
+accuracy,1.0,1.0,1.0,1.0
+macro avg,1.0,1.0,1.0,245.0
+weighted avg,1.0,1.0,1.0,245.0

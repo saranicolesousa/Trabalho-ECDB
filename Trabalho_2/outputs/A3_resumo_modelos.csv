@@ -1,0 +1,5 @@
+Modelo,Accuracy,F1 (weighted),Observação
+Logistic Regression,1.0,1.0,Modelo linear; serve de baseline
+Random Forest,1.0,1.0,Permite extrair importância das variáveis
+SVM (RBF),1.0,1.0,Bom para alta dimensionalidade
+KNN (k=5),1.0,1.0,Mais simples; sensível a escala

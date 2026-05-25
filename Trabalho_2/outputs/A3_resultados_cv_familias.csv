@@ -1,0 +1,5 @@
+Modelo,Accuracy,Accuracy (±std),Precision (weighted),Recall (weighted),F1 (weighted)
+Logistic Regression,1.0,0.0,1.0,1.0,1.0
+Random Forest,1.0,0.0,1.0,1.0,1.0
+SVM (RBF),1.0,0.0,1.0,1.0,1.0
+KNN (k=5),1.0,0.0,1.0,1.0,1.0
