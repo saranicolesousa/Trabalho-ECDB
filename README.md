@@ -1,7 +1,6 @@
 # Extração de Conhecimento de Dados (ECDB) 
----
-Este repositório contém os trabalhos práticos desenvolvidos no âmbito da unidade curricular de Extração de Conhecimento de Dados Biológicos, com foco na exploração, análise multivariada e modelação preditiva de dados em contextos biológicos e químicos.
 
+Este repositório contém os trabalhos práticos desenvolvidos no âmbito da unidade curricular de Extração de Conhecimento de Dados Biológicos, com foco na exploração, análise multivariada e modelação preditiva de dados em contextos biológicos e químicos.
 
 ## Trabalhos Desenvolvidos
 
