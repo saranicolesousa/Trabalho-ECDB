@@ -18,7 +18,7 @@ Para garantir a correta execução de todos os *scripts* e *notebooks* deste rep
 
 - Para o **Trabalho 1 (R/Bioconductor)**: Abra os ficheiros .Rmd diretamente dentro da pasta Trabalho_1. Certifique-se de que os dados descarregados do cBioPortal são colocados na mesma pasta ou no caminho especificado no código.
 
-Para o **Trabalho 2 (Python)**: Navegue para a pasta Trabalho_2 antes de iniciar o Jupyter Notebook. É estritamente necessário que os ficheiros de dados (raman_data.csv e compound_data.xlsx) permaneçam na mesma diretoria que o ficheiro grupo8.ipynb para que a leitura dos dados seja feita com sucesso.
+- Para o **Trabalho 2 (Python)**: Navegue para a pasta Trabalho_2 antes de iniciar o Jupyter Notebook. É estritamente necessário que os ficheiros de dados (raman_data.csv e compound_data.xlsx) permaneçam na mesma diretoria que o ficheiro grupo8.ipynb para que a leitura dos dados seja feita com sucesso.
 --- 
 ## Autores (Grupo 8)
 
