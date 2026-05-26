@@ -1,4 +1,0 @@
-"Modelo","Accuracy","Sensitivity","Specificity"
-"LDA",0.84,0.9302,0.7719
-"Árvore",0.9,0.8372,0.9474
-"Random Forest",0.97,0.9302,1
